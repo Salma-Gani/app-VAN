@@ -21,9 +21,15 @@ def render() -> None:
     table = shared.market_table()
 
     ui.hero(
-        "Tableau de bord",
+        "Vue globale du marché",
         "Synthèse du marché : Bourse de Casablanca, régime de volatilité, secteurs et opportunités.",
         badge=ui.badge(f"Régime : {regime.get('label', '—')}", _tone(regime.get("entry_gate"))),
+    )
+
+    ui.source_note(
+        ["Bourse de Casablanca (API publique)", "Yahoo Finance", "Flux RSS publics"],
+        as_of=f"clôture du {shared.last_market_date(table)}",
+        detail="Cours différés ; les fondamentaux hors titres/dividende sont saisis par l'utilisateur.",
     )
 
     _kpi_strip(regime, indices, table)
@@ -129,7 +135,6 @@ def _masi_chart() -> None:
     fig.add_trace(go.Scatter(
         x=enriched["date"], y=enriched["close"], name="MASI", mode="lines",
         line=dict(color=COLORS["primary"], width=2.6),
-        fill="tozeroy", fillcolor="rgba(34,211,166,.07)",
     ))
     for col, color, label in (("sma20", COLORS["accent"], "MM 20"), ("sma50", COLORS["warning"], "MM 50")):
         if col in enriched.columns:
@@ -139,8 +144,12 @@ def _masi_chart() -> None:
     hi = enriched["high"].max() if "high" in enriched else None
     if lo and hi:
         fig.add_hrect(y0=lo, y1=hi, fillcolor="rgba(91,141,239,.04)", line_width=0)
+    vals = enriched["close"].dropna()
+    if not vals.empty:
+        pad = max((vals.max() - vals.min()) * 0.12, 1.0)
+        fig.update_yaxes(range=[vals.min() - pad, vals.max() + pad])
     fig.update_layout(title="", height=430, hovermode="x unified",
-                      margin=dict(l=10, r=10, t=10, b=10))
+                      margin=dict(l=48, r=24, t=10, b=38))
     ui.plot(fig, key="dash_masi")
 
 
@@ -148,8 +157,9 @@ def _vix_block(regime: Dict[str, Any]) -> None:
     vix = regime.get("vix") or {}
     ui.section("Volatilité implicite (VIX)", "Niveau et implication sur le momentum d'entrée.")
     ui.plot(charts.gauge(vix.get("level"), title="VIX", max_value=45,
-                         steps=[(0, 12, "#5B8DEF"), (12, 16, "#22D3A6"), (16, 22, "#3C6EA5"),
-                                (22, 30, "#F5B547"), (30, 45, "#F45B69")]),
+                         steps=[(0, 12, COLORS["accent"]), (12, 16, COLORS["primary"]),
+                                (16, 22, COLORS["accent"]), (22, 30, COLORS["warning"]),
+                                (30, 45, COLORS["danger"])]),
             key="dash_vix", height=250)
     pct = vix.get("percentile")
     ui.note(

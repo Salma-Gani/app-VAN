@@ -228,8 +228,8 @@ def gauge(value: Optional[float], title: str = "", max_value: float = 50,
     """Jauge (VIX, score, etc.)."""
     v = 0 if value is None else float(value)
     if steps is None:
-        steps = [(0, 12, "#5B8DEF"), (12, 16, "#22D3A6"), (16, 22, "#5B8DEF"),
-                 (22, 30, "#F5B547"), (30, max_value, "#F45B69")]
+        steps = [(0, 12, C["accent"]), (12, 16, C["primary"]), (16, 22, C["accent"]),
+                 (22, 30, C["warning"]), (30, max_value, C["danger"])]
     fig = go.Figure(
         go.Indicator(
             mode="gauge+number",
@@ -310,7 +310,7 @@ def sector_treemap(df: pd.DataFrame, height: int = 520,
             ),
             marker=dict(
                 colors=sub["change_pct"],
-                colorscale=[[0, C["down"]], [0.5, "#2A3A55"], [1, C["up"]]],
+                colorscale=[[0, C["down"]], [0.5, "#EDE8DD"], [1, C["up"]]],
                 cmid=0, cmin=-lim, cmax=lim,
                 line=dict(color=C["bg"], width=1.4),
             ),
@@ -373,8 +373,8 @@ def risk_return_scatter(df: pd.DataFrame, height: int = 460) -> go.Figure:
             x=sub["volatility"], y=sub["return_12m"], mode="markers+text",
             text=sub["symbol"], textposition="top center", textfont=dict(size=9, color=C["muted"]),
             marker=dict(size=sizes, color=sub["return_12m"],
-                        colorscale=[[0, C["down"]], [0.5, "#2A3A55"], [1, C["up"]]],
-                        cmid=0, line=dict(color="rgba(231,238,249,.35)", width=1), opacity=0.9),
+                        colorscale=[[0, C["down"]], [0.5, "#EDE8DD"], [1, C["up"]]],
+                        cmid=0, line=dict(color="rgba(11,37,69,.18)", width=1), opacity=0.9),
             customdata=np.stack([sub["name"], sub["sector"], sub["composite_score"].fillna(0)], axis=-1),
             hovertemplate=(
                 "<b>%{text}</b> — %{customdata[0]}<br>Secteur : %{customdata[1]}<br>"
@@ -399,7 +399,7 @@ def correlation_heatmap(corr: pd.DataFrame, height: int = 520,
     fig = go.Figure(
         go.Heatmap(
             z=corr.values, x=list(corr.columns), y=list(corr.index),
-            colorscale=[[0, "#F45B69"], [0.5, "#111A2C"], [1, "#22D3A6"]],
+            colorscale=[[0, C["down"]], [0.5, "#F3F0E7"], [1, C["up"]]],
             zmin=-1, zmax=1, colorbar=dict(title="ρ", tickfont=dict(color=C["muted"])),
             hovertemplate="%{y} / %{x}<br>ρ = %{z:.2f}<extra></extra>",
         )
@@ -469,7 +469,7 @@ def efficient_frontier_chart(
             go.Scatter(
                 x=sample["vol"], y=sample["return"], mode="markers", name="Portefeuilles simulés",
                 marker=dict(size=4, color=sample["sharpe"],
-                            colorscale=[[0, "#2A3A55"], [0.5, "#5B8DEF"], [1, "#22D3A6"]],
+                            colorscale=[[0, "#EDE8DD"], [0.5, C["accent"]], [1, C["primary"]]],
                             opacity=0.55, colorbar=dict(title="Sharpe", tickfont=dict(color=C["muted"]))),
                 hovertemplate="Volatilité %{x:.2%}<br>Rendement %{y:.2%}<extra></extra>",
             )
@@ -572,8 +572,8 @@ def heatmap_valuations(df: pd.DataFrame, height: int = 460,
             x=sub["r_per"], y=sub["r_roe"], mode="markers+text", text=sub["symbol"],
             textposition="top center", textfont=dict(size=9, color=C["muted"]),
             marker=dict(size=sizes, color=sub["composite_score"].fillna(50),
-                        colorscale=[[0, C["danger"]], [0.5, "#F5B547"], [1, C["primary"]]],
-                        cmin=20, cmax=80, line=dict(color="rgba(231,238,249,.3)", width=1), opacity=0.9),
+                        colorscale=[[0, C["danger"]], [0.5, C["warning"]], [1, C["primary"]]],
+                        cmin=20, cmax=80, line=dict(color="rgba(11,37,69,.18)", width=1), opacity=0.9),
             customdata=np.stack([sub["name"], sub["sector"]], axis=-1),
             hovertemplate=("<b>%{text}</b> — %{customdata[0]}<br>%{customdata[1]}<br>"
                            "P/E : %{x:.1f}x<br>ROE : %{y:.1%}<extra></extra>"),

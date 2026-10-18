@@ -22,10 +22,17 @@ def render() -> None:
     profile = shared.get_profile()
 
     ui.hero(
-        "Mon profil d'investisseur",
+        "Mon patrimoine",
         "Revenus, charges, patrimoine et tolérance au risque : ces informations pilotent "
         "l'allocation cible, les recommandations et les simulations.",
         badge=ui.badge(profile.investor_type()["label"], _type_tone(profile)),
+    )
+
+    ui.note(
+        "**Confidentialité** : vos revenus, actifs, dettes et positions restent stockés localement "
+        "dans `data/user/`. Ils ne sont jamais envoyés à un modèle de langage sans votre accord explicite "
+        "(onglet Configuration de l'AI Market Intelligence).",
+        "info", "🔒",
     )
 
     _kpis(profile)

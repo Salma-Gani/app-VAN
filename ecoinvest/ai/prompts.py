@@ -21,21 +21,27 @@ RÈGLES ABSOLUES
    {RISK_FREE_RATE:.2%}, fiscalité plus-values {CAPITAL_GAINS_TAX:.0%} (TPCVM),
    dividendes {DIVIDEND_TAX:.0%}.
 7. Tu termines toujours par un encadré « ⚠️ Risques » d'une à deux lignes.
+8. Tu expliques ta conclusion : tu listes séparément ce qui la SOUTIENT et ce qui la CONTREDIT,
+   puis tu indiques les données manquantes et un niveau de confiance (élevé / moyen / faible).
+   Chaque affirmation chiffrée doit être reliée à une donnée présente dans le contexte.
 """
 
-SYSTEM_MARKET_ANALYST = f"""Tu es « EcoInvest Analyst », analyste quantitatif senior spécialiste du marché
+SYSTEM_MARKET_ANALYST = f"""Tu es « Atlas Analyst », analyste quantitatif senior spécialiste du marché
 actions marocain (Bourse de Casablanca) et des marchés internationaux.
 Tu produis des analyses d'investissement actionnables, chiffrées et hiérarchisées.
 {BASE_RULES}
 FORMAT ATTENDU
-**Verdict** (1 ligne, avec un niveau : Achat fort / Achat / Conserver / Alléger / Éviter)
-**Thèse d'investissement** (3 à 5 puces, chacune appuyée sur un chiffre du contexte)
+**Verdict** (1 ligne : Achat fort / Achat / Conserver / Alléger / Éviter — avec niveau de confiance)
+**Ce qui soutient la conclusion** (3 à 5 puces, chacune avec un chiffre et sa source)
+**Ce qui la contredit** (2 à 4 puces : signaux opposés, valorisation, risque, actualité négative)
+**Données manquantes** (1 à 3 puces ; écrire « donnée non disponible » si nécessaire)
+**Thèse d'investissement** (synthèse en 2 à 3 phrases)
 **Analyse fondamentale** | **Analyse technique** | **Risque** (puces courtes)
 **Plan d'exécution** (zone d'entrée, invalidation/stop, objectif, taille de position %)
 **⚠️ Risques**
 """
 
-SYSTEM_CHATBOT = f"""Tu es l'assistant conversationnel d'EcoInvest Pro, une application d'analyse
+SYSTEM_CHATBOT = f"""Tu es l'assistant conversationnel d'ATLAS FINANCE, une application d'analyse
 et de simulation d'investissement sur la Bourse de Casablanca et les marchés mondiaux.
 Tu aides l'utilisateur à comprendre ses données, ses indicateurs et ses options.
 {BASE_RULES}
@@ -46,7 +52,7 @@ STYLE
 - Si la question porte sur un symbole, utilise les données de ce symbole présentes dans le contexte.
 """
 
-SYSTEM_BRIEFING = f"""Tu es le rédacteur du briefing de marché quotidien d'EcoInvest Pro.
+SYSTEM_BRIEFING = f"""Tu es le rédacteur du briefing de marché quotidien d'ATLAS FINANCE.
 À partir des données fournies, rédige un briefing de 150 à 250 mots, structuré ainsi :
 1. **Le marché en une phrase** (tendance MASI + largeur + VIX).
 2. **Trois mouvements à retenir** (avec chiffres).
@@ -171,33 +177,67 @@ def company_context(symbol: str, row: Dict[str, Any], technical: Dict[str, Any],
     return "\n".join(lines)
 
 
-def portfolio_context(profile: Any, enriched: Any, recommendation: Optional[Dict[str, Any]] = None) -> str:
-    """Bloc de contexte « profil et patrimoine »."""
+def portfolio_context(
+    profile: Any,
+    enriched: Any,
+    recommendation: Optional[Dict[str, Any]] = None,
+    share_amounts: bool = False,
+) -> str:
+    """Bloc de contexte « profil et patrimoine ».
+
+    Par défaut, **les montants personnels ne sont pas transmis** au modèle : seuls les
+    ratios, le profil de risque et les poids du portefeuille sont envoyés. L'utilisateur
+    peut explicitement autoriser le partage des montants.
+    """
     lines = ["### PROFIL DE L'INVESTISSEUR (données saisies)"]
+    if share_amounts:
+        lines.append(
+            f"Revenu mensuel net : {_fmt(profile.monthly_income)} MAD · charges "
+            f"{_fmt(profile.monthly_charges)} MAD · capacité d'épargne "
+            f"{_fmt(profile.savings_capacity)} MAD/mois ({_fmt(profile.savings_rate, 'pct')})"
+        )
+        lines.append(
+            f"Patrimoine net : {_fmt(profile.net_worth, 'money')} · actifs financiers "
+            f"{_fmt(profile.financial_assets, 'money')} · immobilier "
+            f"{_fmt(profile.real_estate_value, 'money')} · dettes {_fmt(profile.total_debt, 'money')}"
+        )
+        lines.append(
+            f"Objectif : {_fmt(profile.target_capital, 'money')} · revenu cible "
+            f"{_fmt(profile.target_monthly_income)} MAD/mois"
+        )
+    else:
+        lines.append(
+            "Revenu et charges : **non transmis (confidentiel)** · capacité d'épargne "
+            f"{_fmt(profile.savings_rate, 'pct')} du revenu · taux d'endettement "
+            f"{_fmt(profile.debt_ratio, 'pct') if profile.debt_ratio is not None else 'n.d.'}"
+        )
+        lines.append(
+            "Patrimoine : **non transmis (confidentiel)** · part actions actuelle "
+            f"{_fmt(profile.equity_share, 'pct') if profile.equity_share is not None else 'n.d.'} · "
+            f"mois de charges couverts par l'épargne de précaution "
+            f"{_fmt(profile.emergency_months, 'num') if profile.emergency_months is not None else 'n.d.'}"
+        )
+        lines.append(
+            "Objectif de capital : **non transmis (confidentiel)**. Ne demande pas ces montants."
+        )
     lines.append(
-        f"Revenu mensuel net : {_fmt(profile.monthly_income)} MAD · charges {_fmt(profile.monthly_charges)} MAD · "
-        f"capacité d'épargne {_fmt(profile.savings_capacity)} MAD/mois ({_fmt(profile.savings_rate, 'pct')})"
+        f"Âge {profile.age} ans · horizon {profile.horizon_years} ans · tolérance au risque "
+        f"{profile.risk_tolerance}/5 · drawdown maximal accepté "
+        f"{_fmt(profile.max_acceptable_drawdown, 'pct')}"
     )
     lines.append(
-        f"Patrimoine net : {_fmt(profile.net_worth, 'money')} · actifs financiers {_fmt(profile.financial_assets, 'money')} · "
-        f"immobilier {_fmt(profile.real_estate_value, 'money')} · dettes {_fmt(profile.total_debt, 'money')}"
+        f"Score de risque global {profile.overall_risk_score():.0%} → profil "
+        f"« {profile.investor_type().get('label')} » · part actions recommandée "
+        f"{profile.recommended_equity_share():.0%}"
     )
-    lines.append(
-        f"Âge {profile.age} ans · horizon {profile.horizon_years} ans · tolérance au risque {profile.risk_tolerance}/5 · "
-        f"drawdown maximal accepté {_fmt(profile.max_acceptable_drawdown, 'pct')}"
-    )
-    lines.append(
-        f"Score de risque global {profile.overall_risk_score():.0%} → profil « {profile.investor_type().get('label')} » · "
-        f"part actions recommandée {profile.recommended_equity_share():.0%}"
-    )
-    lines.append(f"Objectif : {_fmt(profile.target_capital, 'money')} · revenu cible {_fmt(profile.target_monthly_income)} MAD/mois")
     if enriched is not None and not enriched.empty:
         lines.append("\n### PORTEFEUILLE DÉTENU")
         for _, h in enriched.head(15).iterrows():
-            lines.append(
-                f"- {h.get('symbol')} · {_fmt(h.get('value'), 'money')} "
-                f"({_fmt(h.get('weight'), 'pct')} du portefeuille) · plus-value {_fmt(h.get('pnl_pct'), 'pct')}"
-            )
+            base = f"- {h.get('symbol')} · {_fmt(h.get('weight'), 'pct')} du portefeuille"
+            if share_amounts:
+                base += f" · {_fmt(h.get('value'), 'money')}"
+            base += f" · plus-value {_fmt(h.get('pnl_pct'), 'pct')}"
+            lines.append(base)
     else:
         lines.append("\n### PORTEFEUILLE DÉTENU\n- Aucune position enregistrée.")
     if recommendation:

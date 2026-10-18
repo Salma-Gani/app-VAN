@@ -42,6 +42,12 @@ def render() -> None:
         badge=ui.badge(profile.investor_type()["label"], "accent"),
     )
 
+    ui.source_note(
+        ["Hypothèses du moteur", "Statistiques BVC / Yahoo Finance"],
+        detail="Rendements attendus, volatilité, inflation, fiscalité et frais sont des hypothèses "
+               "explicites, pas des prévisions. Les rendements passés ne préjugent pas des rendements futurs.",
+    )
+
     params = _inputs(profile)
     _headline(params)
     st.divider()

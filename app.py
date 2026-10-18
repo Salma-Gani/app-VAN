@@ -1,13 +1,13 @@
-"""EcoInvest Pro — point d'entrée Streamlit.
+"""ATLAS FINANCE — point d'entrée Streamlit.
 
-Lancement :  streamlit run app.py
+Lancement :  python3 -m streamlit run app.py
 """
 from __future__ import annotations
 
 import streamlit as st
 
 from ecoinvest import theme
-from ecoinvest.config import APP_ICON, APP_NAME, APP_TAGLINE, VERSION
+from ecoinvest.config import APP_ICON, APP_NAME, VERSION
 
 
 def _sidebar() -> None:
@@ -30,7 +30,7 @@ def _sidebar() -> None:
                 f"""
                 <div class="ei-card" style="padding:12px 14px">
                   <div class="ei-kpi-label">MASI</div>
-                  <div style="font-size:1.35rem;font-weight:800">{row['value']:,.2f}</div>
+                  <div style="font-size:1.35rem;font-weight:700">{row['value']:,.2f}</div>
                   <span class="ei-badge {tone}">{arrow} {change * 100:+.2f} %</span>
                   <div class="ei-kpi-sub" style="margin-top:.35rem">
                     YTD {row['ytd_pct'] * 100:+.2f} %
@@ -57,10 +57,7 @@ def _sidebar() -> None:
             f"{ui.badge(itype['label'], 'info')}",
             unsafe_allow_html=True,
         )
-        st.sidebar.caption(
-            f"Revenu {profile.monthly_income:,.0f} MAD · épargne "
-            f"{profile.savings_capacity:,.0f} MAD/mois".replace(",", "\u202f")
-        )
+        st.sidebar.caption(f"Horizon {profile.horizon_years} ans · données stockées localement")
     except Exception:
         st.sidebar.caption("Profil non disponible.")
 
@@ -81,13 +78,13 @@ def _sidebar() -> None:
     st.sidebar.divider()
     st.sidebar.caption(
         "Sources : Bourse de Casablanca (API publique), Yahoo Finance, flux RSS publics. "
-        "Fondamentaux saisis par l'utilisateur."
+        "Cours différés. Fondamentaux hors titres/dividende saisis par l'utilisateur."
     )
     st.sidebar.caption(f"{APP_NAME} · v{VERSION}")
 
 
 def main() -> None:
-    theme.setup_page(f"{APP_NAME} — Analyse & simulation", APP_ICON)
+    theme.setup_page(f"{APP_NAME} — Investment intelligence", APP_ICON)
 
     # Import après set_page_config : les pages enregistrent des décorateurs Streamlit.
     from ecoinvest.ui.pages import (
@@ -95,6 +92,7 @@ def main() -> None:
         company,
         dashboard,
         fundamentals_page,
+        home,
         news_page,
         portfolio_builder,
         profile_page,
@@ -105,33 +103,37 @@ def main() -> None:
     )
 
     entries = [
-        ("dashboard", "Tableau de bord", "🏠", dashboard.render, "dashboard"),
-        ("screener", "Screener BVC", "🔍", screener.render, "screener"),
-        ("company", "Analyse société", "🏢", company.render, "company"),
-        ("news_page", "Actualités & sentiment", "📰", news_page.render, "news"),
-        ("valuation", "Valorisation DCF", "🧮", valuation.render, "valuation"),
-        ("fundamentals_page", "Données fondamentales", "📊", fundamentals_page.render, "fundamentals"),
-        ("profile_page", "Mon profil", "👤", profile_page.render, "profile"),
-        ("simulator", "Simulateur", "📈", simulator.render, "simulator"),
-        ("portfolio_builder", "Portefeuille & arbitrage", "💼", portfolio_builder.render, "portfolio"),
-        ("ai_page", "Agent IA", "🤖", ai_page.render, "agent"),
-        ("projects", "Projets VAN / TRI", "🌿", projects.render, "projects"),
+        ("home", "Accueil", "🧭", home.render, "accueil"),
+        ("dashboard", "Vue globale du marché", "📊", dashboard.render, "marche"),
+        ("screener", "Screener & technique", "🔍", screener.render, "screener"),
+        ("company", "Analyse société", "🏢", company.render, "societe"),
+        ("news_page", "Actualités & sentiment", "📰", news_page.render, "actualites"),
+        ("valuation", "Valorisation & cash-flows", "🧮", valuation.render, "valorisation"),
+        ("fundamentals_page", "Données fondamentales", "🧾", fundamentals_page.render, "fondamentaux"),
+        ("profile_page", "Mon patrimoine", "👤", profile_page.render, "patrimoine"),
+        ("simulator", "Simulateur", "📈", simulator.render, "simulateur"),
+        ("portfolio_builder", "Portefeuille & alternatives", "💼", portfolio_builder.render, "portefeuille"),
+        ("ai_page", "AI Market Intelligence", "🧠", ai_page.render, "intelligence"),
+        ("projects", "Comparateur de projets", "🌿", projects.render, "projets"),
     ]
 
     pages = {}
     for key, title, icon, fn, path in entries:
-        pages[key] = st.Page(
-            fn,
-            title=title,
-            icon=icon,
-            url_path=path,
-            default=(key == "dashboard"),
-        )
+        kwargs = dict(title=title, icon=icon, default=(key == "home"))
+        if key != "home":
+            kwargs["url_path"] = path
+        pages[key] = st.Page(fn, **kwargs)
     st.session_state["_nav_pages"] = pages
+
+    try:
+        st.logo("assets/atlas_logo.svg", size="large")
+    except Exception:
+        pass
 
     nav = st.navigation(
         {
-            "Marché": [pages["dashboard"], pages["screener"], pages["company"], pages["news_page"]],
+            "Pilotage": [pages["home"], pages["dashboard"]],
+            "Marchés": [pages["screener"], pages["company"], pages["news_page"]],
             "Analyse": [pages["valuation"], pages["fundamentals_page"]],
             "Patrimoine": [pages["profile_page"], pages["simulator"], pages["portfolio_builder"]],
             "Intelligence": [pages["ai_page"]],

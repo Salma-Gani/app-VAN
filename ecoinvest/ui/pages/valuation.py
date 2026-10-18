@@ -33,6 +33,12 @@ def render() -> None:
         badge=ui.badge(symbol, "accent"),
     )
 
+    ui.source_note(
+        ["BVC (cours, nombre de titres, dividende)", "États financiers saisis/importés"],
+        as_of=f"clôture du {shared.last_market_date(table)}",
+        detail="Le DCF repose sur des hypothèses explicites : croissance, marge, taux d'actualisation et valeur terminale.",
+    )
+
     fcf_start = forecast.base_fcf(f)
     if fcf_start is None or fcf_start <= 0:
         ui.note(
@@ -288,7 +294,7 @@ def _sensitivity(result: Dict[str, Any], assumptions: Dict[str, Any]) -> None:
             z=df.values.astype(float),
             x=list(df.columns),
             y=list(df.index),
-            colorscale=[[0, COLORS["danger"]], [0.5, "#152034"], [1, COLORS["primary"]]],
+            colorscale=[[0, COLORS["danger"]], [0.5, "#EDE8DD"], [1, COLORS["primary"]]],
             colorbar=dict(title="MAD", tickfont=dict(color=COLORS["muted"])),
             hovertemplate="Taux %{x}<br>g terminal %{y}<br>Valeur : %{z:,.2f} MAD<extra></extra>",
         )

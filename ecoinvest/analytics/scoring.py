@@ -306,24 +306,24 @@ def _add_signal(df: pd.DataFrame) -> pd.DataFrame:
 
         if comp is None:
             signals.append("Données insuffisantes")
-            colors.append("#8DA2C0")
+            colors.append("#64748B")
             plans.append(None)
             scores.append(None)
             continue
 
         gated = comp + gate * 12.0
         if gated >= 72 and mom >= 0.15 and trend >= 0:
-            sig, col = "🟢 Achat fort", "#22D3A6"
+            sig, col = "🟢 Achat fort", "#0F766E"
         elif gated >= 62 and trend >= -0.1:
-            sig, col = "🟢 Achat", "#22D3A6"
+            sig, col = "🟢 Achat", "#0F766E"
         elif gated >= 52:
-            sig, col = "🔵 Consolider / conserver", "#5B8DEF"
+            sig, col = "🔵 Consolider / conserver", "#123B6D"
         elif gated >= 42:
-            sig, col = "🟡 Attendre", "#F5B547"
+            sig, col = "🟡 Attendre", "#B45309"
         elif gated >= 32:
-            sig, col = "🟠 Alléger", "#F5B547"
+            sig, col = "🟠 Alléger", "#B45309"
         else:
-            sig, col = "🔴 Éviter / vendre", "#F45B69"
+            sig, col = "🔴 Éviter / vendre", "#B42318"
 
         if completeness < 0.34:
             sig = sig + " (technique seul)"
@@ -402,20 +402,20 @@ def market_regime(force: bool = False) -> Dict[str, Any]:
     gate = float(max(-1.0, min(1.0, gate)))
 
     if gate >= 0.35:
-        label, color = "Risk-on — conditions favorables", "#22D3A6"
+        label, color = "Risk-on — conditions favorables", "#0F766E"
         advice = ("Le régime de marché soutient la prise de risque : les entrées sur valeurs "
                   "de qualité en tendance haussière sont statistiquement favorisées.")
     elif gate >= 0.1:
-        label, color = "Légèrement favorable", "#5B8DEF"
+        label, color = "Légèrement favorable", "#123B6D"
         advice = "Contexte porteur mais sans excès : privilégiez les renforcements progressifs."
     elif gate >= -0.1:
-        label, color = "Neutre — sélectivité requise", "#8DA2C0"
+        label, color = "Neutre — sélectivité requise", "#64748B"
         advice = "Marché sans direction claire : concentrez-vous sur les meilleurs fondamentaux et fractionnez les entrées."
     elif gate >= -0.35:
-        label, color = "Prudence — risk-off modéré", "#F5B547"
+        label, color = "Prudence — risk-off modéré", "#B45309"
         advice = "Conditions dégradées : réduisez la taille des positions et privilégiez les valeurs défensives."
     else:
-        label, color = "Risk-off — éviter les entrées", "#F45B69"
+        label, color = "Risk-off — éviter les entrées", "#B42318"
         advice = "Régime hostile : privilégiez le cash et les valeurs à faible bêta ; n'entrez pas en force."
 
     out = {

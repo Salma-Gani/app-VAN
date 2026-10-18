@@ -132,18 +132,18 @@ class InvestorProfile:
     def investor_type(self) -> Dict[str, str]:
         s = self.overall_risk_score()
         if s < 0.25:
-            return {"label": "Prudent / défensif", "color": "#5B8DEF",
+            return {"label": "Prudent / défensif", "color": "#123B6D",
                     "desc": "Priorité à la préservation du capital. Volatilité faible acceptée uniquement."}
         if s < 0.45:
-            return {"label": "Modéré", "color": "#22D3A6",
+            return {"label": "Modéré", "color": "#0F766E",
                     "desc": "Équilibre entre revenu et croissance, avec une exposition actions limitée."}
         if s < 0.68:
-            return {"label": "Équilibré / dynamique", "color": "#22D3A6",
+            return {"label": "Équilibré / dynamique", "color": "#0F766E",
                     "desc": "Exposition actions majoritaire, tolérance aux corrections temporaires."}
         if s < 0.85:
-            return {"label": "Offensif", "color": "#F5B547",
+            return {"label": "Offensif", "color": "#B45309",
                     "desc": "Recherche de performance, accepte des drawdowns significatifs."}
-        return {"label": "Très offensif", "color": "#F45B69",
+        return {"label": "Très offensif", "color": "#B42318",
                 "desc": "Recherche de rendement maximal, forte tolérance à la volatilité."}
 
     def recommended_equity_share(self) -> float:

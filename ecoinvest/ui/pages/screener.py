@@ -22,10 +22,16 @@ def render() -> None:
         return
 
     ui.hero(
-        "Screener BVC",
+        "Screener & analyse technique",
         f"{len(table)} valeurs cotées à la Bourse de Casablanca · filtrage par secteur, "
         "score, valorisation, risque et liquidité.",
         badge=ui.badge(f"{table['sector'].nunique()} secteurs", "info"),
+    )
+
+    ui.source_note(
+        ["Bourse de Casablanca (API publique)"],
+        as_of=f"clôture du {shared.last_market_date(table)}",
+        detail="Cours ajustés des opérations sur titres ; volumes en MAD.",
     )
 
     filtered, params = _filters(table)

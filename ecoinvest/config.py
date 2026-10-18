@@ -5,10 +5,11 @@ import os
 from pathlib import Path
 
 # ═══════════════════════════ Identité de l'application ═══════════════════════════
-APP_NAME = "EcoInvest Pro"
-APP_TAGLINE = "Écosystème d'analyse, de simulation et d'aide à la décision sur les marchés"
-APP_ICON = "📈"
-VERSION = "2.0.0"
+APP_NAME = "ATLAS FINANCE"
+APP_TAGLINE = "Investment intelligence platform"
+APP_SUBTITLE = "Votre capital. Votre stratégie. Une vision plus claire."
+APP_ICON = "🧭"
+VERSION = "3.0.0"
 
 # ═══════════════════════════ Chemins ═══════════════════════════
 ROOT = Path(__file__).resolve().parent.parent
@@ -83,29 +84,32 @@ TTL = {
     "news": 900,           # 15 min
 }
 
-# ═══════════════════════════ Palette (thème terminal financier) ═══════════════════════════
+# ═══════════════════════════ Palette (institutionnelle, fond clair) ═══════════════════════════
 COLORS = {
-    "bg": "#070C16",
-    "surface": "#0E1729",
-    "surface2": "#152034",
-    "border": "#213252",
-    "text": "#E7EEF9",
-    "muted": "#8DA2C0",
-    "primary": "#22D3A6",
-    "primary_dark": "#0E9F7E",
-    "accent": "#5B8DEF",
-    "accent2": "#A78BFA",
-    "warning": "#F5B547",
-    "danger": "#F45B69",
-    "up": "#22D3A6",
-    "down": "#F45B69",
-    "flat": "#8DA2C0",
+    "bg": "#F6F4EF",          # blanc cassé
+    "surface": "#FFFFFF",      # cartes
+    "surface2": "#EFEDE6",     # champs, survols
+    "border": "#DCD7CB",
+    "text": "#0B2545",         # bleu marine
+    "muted": "#61708A",
+    "primary": "#0F766E",      # vert turquoise profond
+    "primary_dark": "#115E59",
+    "accent": "#123B6D",       # bleu institutionnel
+    "accent2": "#7C5CBF",      # violet analytique
+    "warning": "#B45309",
+    "danger": "#B42318",
+    "up": "#047857",
+    "down": "#B42318",
+    "flat": "#64748B",
+    "gold": "#A16207",
+    "navy": "#0B2545",
+    "cream": "#F6F4EF",
 }
 
-# Palette catégorielle pour les graphiques
+# Palette catégorielle pour les graphiques (lisible sur fond clair)
 PALETTE = [
-    "#22D3A6", "#5B8DEF", "#A78BFA", "#F5B547", "#F45B69",
-    "#38BDF8", "#FBBF24", "#34D399", "#FB7185", "#818CF8",
+    "#123B6D", "#0F766E", "#7C5CBF", "#B45309", "#B42318",
+    "#2563EB", "#047857", "#A16207", "#64748B", "#0E7490",
 ]
 
 # ═══════════════════════════ Économie / hypothèses ═══════════════════════════
@@ -210,7 +214,7 @@ def sector_risk_level(sector: str, default: int = 3) -> int:
 ENABLE_LIVE_BVC = os.getenv("ECOINVEST_DISABLE_LIVE", "0") != "1"
 ENABLE_LIVE_YAHOO = os.getenv("ECOINVEST_DISABLE_YAHOO", "0") != "1"
 DISCLAIMER = (
-    "⚠️ **Avertissement** : EcoInvest Pro est un outil d'aide à la décision à visée "
+    "⚠️ **Avertissement** : ATLAS FINANCE est un outil d'aide à la décision à visée "
     "pédagogique et analytique. Il ne constitue ni un conseil en investissement, ni une "
     "recommandation d'achat ou de vente. Les performances passées ne préjugent pas des "
     "performances futures. Vérifiez toujours les données auprès de la Bourse de Casablanca "

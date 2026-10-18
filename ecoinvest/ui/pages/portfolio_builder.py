@@ -20,10 +20,16 @@ def render() -> None:
     classes = optimize.asset_classes()
 
     ui.hero(
-        "Portefeuille & arbitrage",
+        "Portefeuille & alternatives",
         "Comparez votre allocation actuelle à la cible recommandée, chiffrez les arbitrages et "
         "identifiez les meilleures opportunités du marché.",
         badge=ui.badge(profile.investor_type()["label"], "accent"),
+    )
+
+    ui.source_note(
+        ["Vos positions (cours BVC)", "Hypothèses de coûts et de fiscalité"],
+        detail="Frais de rééquilibrage estimés à 0,60 % des montants arbitrés ; fiscalité et rendements "
+               "attendus affichés dans les tableaux. Aucune option n'est déclarée « meilleure » sur le seul rendement.",
     )
 
     current, current_value = _current_allocation(profile, enriched)
@@ -99,6 +105,29 @@ def _kpis(profile: Any, current: Dict[str, float], target: Dict[str, float],
         ],
         per_row=5,
     )
+
+    hhi_current = sum(v * v for v in current.values())
+    hhi_target = sum(v * v for v in target.values())
+    effective_current = 1 / hhi_current if hhi_current else 0.0
+    effective_target = 1 / hhi_target if hhi_target else 0.0
+    hist = shared.index_history("MASI", "5Y")
+    drawdown = _max_drawdown(hist["value"]) if hist is not None and not hist.empty else None
+    detail = (
+        f"**Concentration** : {effective_current:.1f} classes d'actifs équivalentes aujourd'hui, "
+        f"{effective_target:.1f} en cible (indice de Herfindahl)."
+    )
+    if drawdown is not None:
+        detail += (f" **Drawdown maximal du MASI sur 5 ans** : {fmt_pct(drawdown, 1)} — "
+                   "repère historique, pas une prévision.")
+    ui.note(detail, "info", "📐")
+
+
+def _max_drawdown(values: Any) -> Optional[float]:
+    series = pd.to_numeric(pd.Series(values), errors="coerce").dropna()
+    if series.empty:
+        return None
+    peak = series.cummax()
+    return float((series / peak - 1.0).min())
 
 
 # ═══════════════════════════ Graphiques d'allocation ═══════════════════════════
@@ -209,13 +238,35 @@ def _recommendation(profile: Any, table: pd.DataFrame) -> None:
             f"(Sharpe {fmt_num(rec['portfolio_sharpe'], 2)}).",
             "info", "📐",
         )
-        options = rec["options"].head(6)
-        display = options[["Option", "Score profil", "Verdict", "Valeur nette finale"]].copy()
-        display["Score profil"] = display["Score profil"].apply(lambda v: fmt_num(v, 0))
-        display["Valeur nette finale"] = display["Valeur nette finale"].apply(
-            lambda v: fmt_money(v, "MAD", compact=True)
+        options = rec["options"].head(7)
+        cols = ["Option", "Score profil", "Rendement net", "Volatilité", "Frais estimés",
+                "Valeur nette finale", "Verdict"]
+        display = options[[c for c in cols if c in options.columns]].copy()
+        for col in ("Rendement net", "Volatilité"):
+            if col in display.columns:
+                display[col] = display[col].apply(lambda v: fmt_pct(v, 2))
+        if "Frais estimés" in display.columns:
+            display["Frais estimés"] = display["Frais estimés"].apply(
+                lambda v: fmt_money(v, "MAD", compact=True)
+            )
+        if "Valeur nette finale" in display.columns:
+            display["Valeur nette finale"] = display["Valeur nette finale"].apply(
+                lambda v: fmt_money(v, "MAD", compact=True)
+            )
+        if "Score profil" in display.columns:
+            display["Score profil"] = display["Score profil"].apply(lambda v: fmt_num(v, 0))
+        ui.table(display, height=min(360, 60 + 34 * len(display)), key="pb_options")
+
+    best = rec.get("best") or {}
+    by_return = rec["options"].sort_values("Rendement net", ascending=False).iloc[0]
+    if best and str(by_return.get("Option")) != str(best.get("Option")):
+        ui.note(
+            f"L'option au **rendement net le plus élevé** est « {by_return.get('Option')} » "
+            f"({fmt_pct(by_return.get('Rendement net'), 2)}), mais elle n'est pas la mieux classée : "
+            f"« {best.get('Option')} » obtient un meilleur score d'adéquation une fois la volatilité, "
+            "l'horizon et votre tolérance au risque pris en compte. Le rendement seul ne suffit pas.",
+            "warn", "⚖️",
         )
-        ui.table(display, height=min(300, 60 + 34 * len(display)), key="pb_options")
 
     st.write("")
     ui.section(

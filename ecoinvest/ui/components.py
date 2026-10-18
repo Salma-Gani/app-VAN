@@ -1,6 +1,7 @@
 """Composants d'interface réutilisables (HTML + Streamlit)."""
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
@@ -13,13 +14,22 @@ from ..utils.formatting import color_of, fmt_money, fmt_num, fmt_pct, delta_badg
 # ═══════════════════════════ Blocs de texte ═══════════════════════════
 
 
+def _inline_md(text: str) -> str:
+    """Convertit le Markdown inline minimal en HTML (les blocs HTML ne parsent pas le Markdown)."""
+    if not text:
+        return ""
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", str(text))
+    text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", text)
+    return text.replace("`", "")
+
+
 def hero(title: str, subtitle: str = "", badge: str = "") -> None:
     extra = f'<div style="margin-top:.5rem">{badge}</div>' if badge else ""
     st.markdown(
         f"""
         <div class="ei-hero">
           <h1>{title}</h1>
-          <p>{subtitle}</p>
+          <p>{_inline_md(subtitle)}</p>
           {extra}
         </div>
         """,
@@ -28,13 +38,19 @@ def hero(title: str, subtitle: str = "", badge: str = "") -> None:
 
 
 def section(title: str, subtitle: str = "") -> None:
-    sub = f'<p class="ei-muted" style="margin:.1rem 0 .6rem">{subtitle}</p>' if subtitle else ""
-    st.markdown(f"### {title}{sub}")
+    st.markdown(f"### {title}")
+    if subtitle:
+        st.markdown(
+            f'<p class="ei-muted" style="margin:-.35rem 0 .75rem;font-size:.88rem">{_inline_md(subtitle)}</p>',
+            unsafe_allow_html=True,
+        )
 
 
 def note(text: str, tone: str = "info", icon: str = "ℹ️") -> None:
-    st.markdown(f'<div class="ei-note {tone if tone != "info" else ""}"><b>{icon}</b> {text}</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="ei-note {tone if tone != "info" else ""}"><b>{icon}</b> {_inline_md(text)}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def verdict(title: str, body: str, color: Optional[str] = None) -> None:
@@ -43,7 +59,7 @@ def verdict(title: str, body: str, color: Optional[str] = None) -> None:
         f"""
         <div class="ei-verdict" style="border-color:{c};">
           <h3 style="color:{c} !important">{title}</h3>
-          <div style="font-size:.92rem;line-height:1.55">{body}</div>
+          <div style="font-size:.92rem;line-height:1.55">{_inline_md(body)}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -56,6 +72,22 @@ def badge(text: str, tone: str = "info") -> str:
 
 def badge_for_delta(value: Optional[float], decimals: int = 2) -> str:
     return delta_badge(value, decimals)
+
+
+def source_note(sources: Sequence[str], as_of: str = "", detail: str = "") -> None:
+    """Ligne de provenance : sources, date de référence et statut de la donnée."""
+    parts = [s for s in sources if s]
+    text = " · ".join(parts)
+    if as_of:
+        text = f"{text} — {as_of}" if text else as_of
+    if detail:
+        text = f"{text}. {detail}" if text else detail
+    st.caption(f"Sources : {text}" if text else detail)
+
+
+def data_badge(label: str, tone: str = "info") -> str:
+    """Petit badge de statut de donnée (clôture, différé, saisi, estimé)."""
+    return badge(label, tone)
 
 
 # ═══════════════════════════ Cartes KPI ═══════════════════════════

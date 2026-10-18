@@ -38,6 +38,11 @@ def render() -> None:
 
     _header(row, symbol)
     _kpis(row)
+    ui.source_note(
+        ["Bourse de Casablanca (cours, volumes)", "Référentiel BVC (titres, dividende)", "RSS publics"],
+        as_of=f"clôture du {_date(row.get('last_date'))}",
+        detail="Les ratios fondamentaux ne sont calculés que si les états financiers correspondants sont saisis.",
+    )
 
     tabs = st.tabs(
         ["🧭 Synthèse", "📈 Technique", "📊 Fondamentaux & ratios", "📰 Actualités", "🤖 Agent IA"]

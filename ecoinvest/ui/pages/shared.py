@@ -21,6 +21,12 @@ def market_table(force: bool = False) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=900, **CACHE_KW)
+def snapshot(force: bool = False) -> pd.DataFrame:
+    """Photo de marché brute (cours, volumes, capitalisation, date de clôture)."""
+    return bvc.snapshot(force=force)
+
+
+@st.cache_data(ttl=900, **CACHE_KW)
 def market_regime(force: bool = False) -> Dict[str, Any]:
     return scoring.market_regime(force=force)
 
@@ -109,7 +115,7 @@ def recommendation(amount: float = 0.0, years: int = 0, profile_key: str = "") -
     )
 
 
-def build_agent(provider: Optional[str] = None):
+def build_agent(provider: Optional[str] = None, share_amounts: bool = False):
     return agent_mod.build_agent(
         market_df=market_table(),
         regime=market_regime(),
@@ -117,6 +123,7 @@ def build_agent(provider: Optional[str] = None):
         enriched_holdings=enriched_holdings() or None,
         recommendation=recommendation(),
         provider=provider,
+        share_amounts=share_amounts,
     )
 
 
@@ -142,6 +149,17 @@ def macro() -> Dict[str, Any]:
 @st.cache_data(ttl=900, **CACHE_KW)
 def coverage() -> pd.DataFrame:
     return fundamentals.coverage_report(scoring.build_market_table())
+
+
+def last_market_date(df: Optional[pd.DataFrame] = None) -> str:
+    """Date de clôture la plus récente des données de marché."""
+    frame = df if df is not None else snapshot()
+    if frame is None or frame.empty or "last_date" not in frame.columns:
+        return "date indisponible"
+    dates = pd.to_datetime(frame["last_date"], errors="coerce").dropna()
+    if dates.empty:
+        return "date indisponible"
+    return dates.max().strftime("%d/%m/%Y")
 
 
 def watchlist() -> list:

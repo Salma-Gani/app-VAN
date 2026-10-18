@@ -51,11 +51,17 @@ def simulate_option(
     notes: str = "",
     dividend_share: float = 0.0,
     is_real: bool = False,
+    fee_rate: float = 0.0,
 ) -> Dict[str, Any]:
-    """Simule une option de placement sur un horizon donné."""
+    """Simule une option de placement sur un horizon donné.
+
+    ``fee_rate`` : frais aller-retour estimés (fraction du montant investi). Ils sont
+    déduits de la valeur nette finale et affichés séparément.
+    """
     gross_value = finance.future_value(amount, 0.0, expected_return, years)
     nr = net_return(expected_return, years, tax=tax, dividend_share=dividend_share)
-    net_value = finance.future_value(amount, 0.0, nr, years)
+    fees = float(amount) * float(fee_rate or 0.0)
+    net_value = finance.future_value(amount, 0.0, nr, years) - fees
     real_value = net_value / (1 + INFLATION_RATE) ** years
     # Intervalle de confiance approximatif (log-normal)
     sigma_t = volatility * np.sqrt(max(years, 0.1))
@@ -69,11 +75,13 @@ def simulate_option(
         "Rendement net": nr,
         "Rendement réel net": (1 + nr) / (1 + INFLATION_RATE) - 1,
         "Valeur brute finale": gross_value,
+        "Frais estimés": fees,
         "Valeur nette finale": net_value,
         "Valeur en dirhams constants": real_value,
         "Gain net": net_value - amount,
         "Scénario défavorable (-1,28σ)": low,
         "Scénario favorable (+1,28σ)": high,
+        "Perte potentielle 1 an (-2σ)": -2.0 * volatility,
         "Volatilité": volatility,
         "Ratio de Sharpe": safe_div(nr - RISK_FREE_RATE, volatility),
         "Liquidité": liquidity,
@@ -106,6 +114,7 @@ def compare_investments(
                 notes=c.note,
                 dividend_share=div_share,
                 is_real=c.real_stats,
+                fee_rate=BROKERAGE_FEE if c.code in ("BVC_MASI", "BVC_BLUECHIP", "BVC_SELECT", "GLOBAL_EQ") else 0.0,
             )
         )
     for custom in include_custom or []:
@@ -160,15 +169,15 @@ def score_option(row: Dict[str, Any], profile: Any) -> Dict[str, Any]:
     )
     final = float(np.clip(50 + 50 * score / sum(weights.values()) * 2, 0, 100))
     if final >= 72:
-        verdict, color = "Excellent choix pour votre profil", "#22D3A6"
+        verdict, color = "Excellent choix pour votre profil", "#0F766E"
     elif final >= 60:
-        verdict, color = "Bon choix", "#22D3A6"
+        verdict, color = "Bon choix", "#0F766E"
     elif final >= 48:
-        verdict, color = "Acceptable", "#5B8DEF"
+        verdict, color = "Acceptable", "#123B6D"
     elif final >= 36:
-        verdict, color = "Peu adapté", "#F5B547"
+        verdict, color = "Peu adapté", "#B45309"
     else:
-        verdict, color = "Inadapté à votre profil", "#F45B69"
+        verdict, color = "Inadapté à votre profil", "#B42318"
     return {
         "score": final,
         "verdict": verdict,
@@ -260,7 +269,7 @@ def narrative_recommendation(rec: Dict[str, Any], profile: Any) -> Dict[str, str
     second = rec.get("second")
     itype = rec.get("investor_type") or {}
     if not best:
-        return {"title": "Données insuffisantes", "body": "Aucune option n'a pu être évaluée.", "color": "#8DA2C0"}
+        return {"title": "Données insuffisantes", "body": "Aucune option n'a pu être évaluée.", "color": "#64748B"}
 
     lines: List[str] = []
     lines.append(
@@ -299,7 +308,7 @@ def narrative_recommendation(rec: Dict[str, Any], profile: Any) -> Dict[str, str
     return {
         "title": f"Recommandation : {best['Option']}",
         "body": "\n\n".join(lines),
-        "color": best.get("_color", "#22D3A6"),
+        "color": best.get("_color", "#0F766E"),
     }
 
 

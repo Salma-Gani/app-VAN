@@ -165,14 +165,14 @@ def delta_badge(value: Optional[float], decimals: int = 2) -> str:
 
 def color_of(value: Optional[float]) -> str:
     if value is None:
-        return "#8DA2C0"
+        return "#64748B"
     try:
         v = float(value)
     except (TypeError, ValueError):
-        return "#8DA2C0"
+        return "#64748B"
     if v != v:
-        return "#8DA2C0"
-    return "#22D3A6" if v > 0 else "#F45B69" if v < 0 else "#8DA2C0"
+        return "#64748B"
+    return "#0F766E" if v > 0 else "#B42318" if v < 0 else "#64748B"
 
 
 def safe_div(a: Optional[float], b: Optional[float]) -> Optional[float]:

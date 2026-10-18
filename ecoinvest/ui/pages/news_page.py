@@ -23,6 +23,11 @@ def render() -> None:
         badge=ui.badge("Sources publiques · sans clé API", "info"),
     )
 
+    ui.source_note(
+        ["Flux RSS publics"],
+        detail="Chaque article renvoie à sa source d'origine ; le sentiment est un indicateur lexical, pas une opinion.",
+    )
+
     df = shared.market_news()
     if df.empty:
         ui.empty_state(

@@ -80,10 +80,13 @@ class AppContext:
 class MarketAgent:
     """Agent unique : analyses d'entreprise, briefing de marché, conversation."""
 
-    def __init__(self, context: AppContext, provider: Optional[str] = None) -> None:
+    def __init__(self, context: AppContext, provider: Optional[str] = None,
+                 share_amounts: bool = False) -> None:
         self.ctx = context
         self.client = llm_mod.get_client(provider)
         self.provider = provider
+        # Par défaut, aucun montant patrimonial n'est transmis au fournisseur LLM.
+        self.share_amounts = bool(share_amounts)
 
     @property
     def mode(self) -> str:
@@ -119,7 +122,12 @@ class MarketAgent:
         return block, {"row": row.to_dict(), "technical": summary, "ratios": ratios, "fundamentals": f}
 
     def _portfolio_block(self) -> str:
-        return prompts.portfolio_context(self.ctx.profile, self.ctx.enriched_holdings, self.ctx.recommendation)
+        return prompts.portfolio_context(
+            self.ctx.profile,
+            self.ctx.enriched_holdings,
+            self.ctx.recommendation,
+            share_amounts=self.share_amounts,
+        )
 
     # ─── Analyses ───
     def analyse_company(self, symbol: str) -> Dict[str, Any]:
@@ -216,6 +224,26 @@ class MarketAgent:
             f"- Perf. 1 an : {fmt_pct(row.get('return_12m'), 2, signed=True)} · YTD {fmt_pct(row.get('ytd_pct'), 2, signed=True)}\n"
             f"- 52 semaines : {fmt_num(row.get('low_52w'))} — {fmt_num(row.get('high_52w'))} MAD"
         )
+        positives, negatives, missing = _signal_factors(payload, score)
+        confidence = _confidence(payload)
+        lines.append("")
+        lines.append(f"### Ce qui soutient la conclusion ({confidence})")
+        lines.extend(f"- {item}" for item in positives) if positives else lines.append(
+            "- Aucun facteur favorable net identifié sur les données disponibles."
+        )
+        lines.append("")
+        lines.append("### Ce qui la contredit")
+        lines.extend(f"- {item}" for item in negatives) if negatives else lines.append(
+            "- Aucun signal contradictoire majeur détecté, mais l'absence de données reste un risque."
+        )
+        lines.append("")
+        lines.append("### Données manquantes et confiance")
+        if missing:
+            lines.extend(f"- {item}" for item in missing)
+        else:
+            lines.append("- Couverture de données satisfaisante sur les dimensions analysées.")
+        lines.append(f"- **Niveau de confiance : {confidence}** — fondé uniquement sur les données "
+                     "chargées par l'application, sans extrapolation.")
         lines.append("")
         lines.append("### Analyse technique")
         lines.append(f"- Tendance : **{trend.get('state')}**")
@@ -472,6 +500,9 @@ class MarketAgent:
             icon = {"good": "✅", "info": "ℹ️", "warn": "⚠️", "danger": "⛔"}.get(d["level"], "•")
             lines.append(f"- {icon} **{d['title']}** — {d['text']}")
         lines.append("")
+        lines.append("> 🔒 **Confidentialité** : cette réponse a été produite localement ; aucun montant "
+                     "n'a été transmis à un modèle externe.")
+        lines.append("")
         lines.append("> ⚠️ **Risques** : ces diagnostics reposent sur les informations que vous avez saisies. "
                      "Une épargne de précaution de 3 à 6 mois de charges reste la priorité avant tout investissement risqué.")
         return "\n".join(lines)
@@ -516,7 +547,7 @@ class MarketAgent:
 
     def _local_help(self) -> str:
         regime = self.ctx.regime or {}
-        lines = ["## Assistant EcoInvest — mode analyste local", ""]
+        lines = ["## Atlas Market Intelligence — mode analyste local", ""]
         lines.append(
             f"Le moteur fonctionne actuellement **sans LLM** : les réponses sont produites par un moteur "
             f"de règles à partir des données réelles chargées. Régime de marché : **{regime.get('label', 'indisponible')}**."
@@ -539,6 +570,135 @@ class MarketAgent:
 
 
 # ═══════════════════════════ Utilitaires ═══════════════════════════
+
+
+def _signal_factors(payload: Dict[str, Any], score: Optional[float]) -> Tuple[List[str], List[str], List[str]]:
+    """Facteurs favorables, défavorables et données manquantes d'une valeur."""
+    row = payload.get("row") or {}
+    tech = payload.get("technical") or {}
+    ratios = payload.get("ratios") or {}
+    positives: List[str] = []
+    negatives: List[str] = []
+    missing: List[str] = []
+
+    def add(condition: bool, target: List[str], text: str) -> None:
+        if condition:
+            target.append(text)
+
+    trend = str(row.get("trend_state") or (tech.get("trend") or {}).get("state") or "")
+    momentum = str(row.get("momentum_state") or (tech.get("momentum") or {}).get("state") or "")
+    rsi = row.get("rsi14")
+    ret12 = row.get("return_12m")
+    vol = row.get("volatility")
+    beta = row.get("beta")
+    drawdown = row.get("max_drawdown")
+    sharpe = row.get("sharpe")
+
+    add("haussi" in trend.lower(), positives, f"Tendance **{trend}** : structure de prix favorable.")
+    add("baissi" in trend.lower(), negatives, f"Tendance **{trend}** : la structure de prix reste dégradée.")
+    add("positif" in momentum.lower(), positives, f"Momentum **{momentum}**, RSI(14) = {fmt_num(rsi, 1)}.")
+    add("négatif" in momentum.lower() or "negatif" in momentum.lower(), negatives,
+        f"Momentum **{momentum}**, RSI(14) = {fmt_num(rsi, 1)}.")
+    if rsi is not None:
+        try:
+            rsi_f = float(rsi)
+            add(rsi_f >= 70, negatives, f"RSI à {rsi_f:.0f} : zone de surachat, risque de consolidation.")
+            add(rsi_f <= 30, positives, f"RSI à {rsi_f:.0f} : zone de survente, rebond possible mais à confirmer.")
+        except (TypeError, ValueError):
+            pass
+    if ret12 is not None:
+        try:
+            r = float(ret12)
+            add(r > 0.10, positives, f"Performance 12 mois **{fmt_pct(r, 1, signed=True)}**.")
+            add(r < -0.10, negatives, f"Performance 12 mois **{fmt_pct(r, 1, signed=True)}**.")
+        except (TypeError, ValueError):
+            pass
+    if score is not None:
+        try:
+            sc = float(score)
+            add(sc >= 60, positives, f"Score composite **{sc:.0f}/100**, au-dessus du seuil d'achat.")
+            add(sc < 40, negatives, f"Score composite **{sc:.0f}/100**, sous le seuil de prudence.")
+        except (TypeError, ValueError):
+            pass
+    if vol is not None:
+        try:
+            v = float(vol)
+            add(v >= 0.35, negatives, f"Volatilité annualisée élevée : **{fmt_pct(v)}**.")
+            add(v < 0.20, positives, f"Volatilité contenue : **{fmt_pct(v)}**.")
+        except (TypeError, ValueError):
+            pass
+    if beta is not None:
+        try:
+            b = float(beta)
+            add(b > 1.2, negatives, f"Bêta **{b:.2f}** : amplification des mouvements du marché.")
+            add(b < 0.8, positives, f"Bêta défensif **{b:.2f}**.")
+        except (TypeError, ValueError):
+            pass
+    if drawdown is not None:
+        try:
+            dd = float(drawdown)
+            add(dd < -0.30, negatives, f"Drawdown maximal historique **{fmt_pct(dd)}**.")
+        except (TypeError, ValueError):
+            pass
+    if sharpe is not None:
+        try:
+            sh = float(sharpe)
+            add(sh > 0.8, positives, f"Ratio de Sharpe **{sh:.2f}** : rendement correctement rémunéré.")
+            add(sh < 0, negatives, f"Ratio de Sharpe négatif (**{sh:.2f}**) sur la période.")
+        except (TypeError, ValueError):
+            pass
+
+    usable = {k: v for k, v in ratios.items() if isinstance(v, dict) and v.get("value") is not None}
+    if usable:
+        ys = (usable.get("dividend_yield") or {}).get("value")
+        if ys is not None and float(ys) >= 0.04:
+            positives.append(f"Rendement du dividende **{fmt_pct(ys)}**.")
+        per = (usable.get("per") or {}).get("value")
+        if per is not None:
+            if float(per) <= 12:
+                positives.append(f"P/E de **{float(per):.1f}x**, inférieur à la moyenne du marché.")
+            elif float(per) >= 25:
+                negatives.append(f"P/E de **{float(per):.1f}x**, prime de valorisation exigeante.")
+        roe = (usable.get("roe") or {}).get("value")
+        if roe is not None:
+            if float(roe) >= 0.15:
+                positives.append(f"ROE **{fmt_pct(roe)}**, rentabilité des fonds propres solide.")
+            elif float(roe) < 0.05:
+                negatives.append(f"ROE faible : **{fmt_pct(roe)}**.")
+        dte = (usable.get("debt_to_equity") or {}).get("value")
+        if dte is not None:
+            if float(dte) > 2:
+                negatives.append(f"Endettement élevé : dette/fonds propres **{float(dte):.2f}x**.")
+            elif float(dte) < 0.8:
+                positives.append(f"Levier maîtrisé : dette/fonds propres **{float(dte):.2f}x**.")
+    else:
+        missing.append("Aucun état financier saisi : P/E, ROE, marges et endettement ne sont pas calculés.")
+    if not tech:
+        missing.append("Historique de cours insuffisant pour les indicateurs techniques.")
+    if not row.get("volume"):
+        missing.append("Volume de la séance non disponible : liquidité non évaluée.")
+    return positives, negatives, missing
+
+
+def _confidence(payload: Dict[str, Any]) -> str:
+    """Niveau de confiance fondé sur la complétude des données, pas sur la conviction."""
+    row = payload.get("row") or {}
+    tech = payload.get("technical") or {}
+    ratios = payload.get("ratios") or {}
+    usable = [v for v in ratios.values() if isinstance(v, dict) and v.get("value") is not None]
+    checks = [
+        bool(usable),
+        bool(tech),
+        row.get("return_12m") is not None,
+        row.get("rsi14") is not None,
+        row.get("max_drawdown") is not None,
+    ]
+    count = sum(1 for c in checks if c)
+    if count >= 4:
+        return "élevé"
+    if count >= 2:
+        return "moyen"
+    return "faible"
 
 
 def _verdict_from(composite: Optional[float], tech_score: Optional[float]) -> str:
@@ -628,6 +788,7 @@ def build_agent(
     recommendation: Optional[Dict[str, Any]] = None,
     provider: Optional[str] = None,
     lazy: bool = True,
+    share_amounts: bool = False,
 ) -> MarketAgent:
     """Construit l'agent en chargeant (paresseusement) les données de contexte."""
     ctx = AppContext()
@@ -647,7 +808,7 @@ def build_agent(
             ctx.universe = bvc.universe()
         except Exception:
             ctx.universe = pd.DataFrame()
-    return MarketAgent(ctx, provider=provider)
+    return MarketAgent(ctx, provider=provider, share_amounts=share_amounts)
 
 
 def agent_status() -> Dict[str, Any]:

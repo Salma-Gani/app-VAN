@@ -168,7 +168,7 @@ def vix_regime(force: bool = False) -> Dict[str, Any]:
     level = vix_level(force=force)
     if level is None:
         return {"level": None, "label": "Indisponible", "score": None, "advice": "",
-                "color": "#8DA2C0", "percentile": None}
+                "color": "#64748B", "percentile": None}
 
     s = vix_series(period="3y", force=force)
     pct: Optional[float] = None
@@ -178,23 +178,23 @@ def vix_regime(force: bool = False) -> Dict[str, Any]:
             pct = float((vals < level).mean())
 
     if level < 12:
-        label, score, color = "Complaisance extrême", -0.35, "#F5B547"
+        label, score, color = "Complaisance extrême", -0.35, "#B45309"
         advice = ("Volatilité très basse : le marché est serein mais vulnérable à un choc. "
                   "Évitez les achats en euphorie ; privilégiez les renforcements progressifs.")
     elif level < 16:
-        label, score, color = "Calme / risk-on", 0.65, "#22D3A6"
+        label, score, color = "Calme / risk-on", 0.65, "#0F766E"
         advice = ("Régime favorable aux actifs risqués. Momentum haussier généralement "
                   "fiable : les entrées sur cassure de résistance sont statistiquement payantes.")
     elif level < 22:
-        label, score, color = "Normalisation", 0.15, "#5B8DEF"
+        label, score, color = "Normalisation", 0.15, "#123B6D"
         advice = ("Volatilité normale : sélectivité accrue. Privilégiez les valeurs à "
                   "fondamentaux solides et évitez le levier.")
     elif level < 30:
-        label, score, color = "Nervosité", -0.45, "#F5B547"
+        label, score, color = "Nervosité", -0.45, "#B45309"
         advice = ("Marché nerveux : réduisez la taille des positions, échelonnez les entrées "
                   "et surveillez les supports clés.")
     else:
-        label, score, color = "Panique / risk-off", -0.85, "#F45B69"
+        label, score, color = "Panique / risk-off", -0.85, "#B42318"
         advice = ("Volatilité de crise : les marchés soldent en désordre. Opportunités "
                   "potentielles pour un investisseur patient, mais entrée fractionnée obligatoire.")
     return {

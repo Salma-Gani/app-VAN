@@ -31,7 +31,12 @@ def render() -> None:
         "Données fondamentales",
         "Renseignez les états financiers des sociétés cotées : les ratios, la valorisation DCF et "
         "les signaux fondamentaux sont calculés automatiquement.",
-        badge=ui.badge(f"{filled} / {len(coverage)} sociétés renseignées", "info"),
+        badge=ui.badge(f"{filled} / {len(coverage)} sociétés couvertes", "info"),
+    )
+
+    ui.source_note(
+        ["Bourse de Casablanca (nombre de titres, dividende)", "Saisie / import utilisateur"],
+        detail="Les champs non renseignés restent vides : aucune estimation, aucune extrapolation.",
     )
 
     ui.kpi_row(

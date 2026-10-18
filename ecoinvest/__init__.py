@@ -1,4 +1,4 @@
-"""EcoInvest Pro — écosystème d'analyse et de simulation d'investissement.
+"""ATLAS FINANCE — écosystème d'analyse et de simulation d'investissement.
 
 Modules
 -------
@@ -13,6 +13,6 @@ ui          : composants, graphiques et pages Streamlit
 from __future__ import annotations
 
 __version__ = "2.0.0"
-__app_name__ = "EcoInvest Pro"
+__app_name__ = "ATLAS FINANCE"
 
 __all__ = ["__version__", "__app_name__"]

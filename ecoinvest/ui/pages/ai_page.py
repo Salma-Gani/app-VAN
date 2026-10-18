@@ -26,7 +26,7 @@ def render() -> None:
     status = llm_mod.provider_status()
     mode_label = "Modèle de langage" if status["mode"] == "llm" else "Analyste local (hors-ligne)"
     ui.hero(
-        "Agent IA EcoInvest",
+        "AI Market Intelligence",
         "Un analyste qui ne travaille qu'avec les données réelles chargées par l'application : "
         "aucun chiffre inventé, aucune recommandation déconnectée du marché.",
         badge=ui.badge(f"{mode_label} · {status['active']}", "up" if status["mode"] == "llm" else "info"),
@@ -40,6 +40,21 @@ def render() -> None:
             "de langage (OpenAI, Anthropic, DeepSeek, Groq, Gemini, Mistral ou Ollama).",
             "info", "🤖",
         )
+
+    st.session_state.setdefault("ai_share_amounts", False)
+    st.toggle(
+        "Autoriser l'envoi de mes montants au modèle de langage",
+        key="ai_share_amounts",
+        help="Par défaut, seuls votre profil de risque, vos ratios d'épargne et les poids de votre "
+             "portefeuille sont transmis. Les montants (revenus, patrimoine, dettes) restent locaux. "
+             "Ce réglage n'a aucun effet en mode analyste local.",
+    )
+    ui.note(
+        "**Conclusions explicables** : pour chaque valeur, l'agent sépare les facteurs favorables, "
+        "les facteurs défavorables, les données manquantes et le niveau de confiance. Aucun chiffre "
+        "n'est inventé ; une donnée absente est signalée comme telle.",
+        "info", "🧠",
+    )
 
     tabs = st.tabs(["💬 Assistant", "📰 Briefing", "🔎 Analyse d'une valeur", "⚙️ Configuration"])
     with tabs[0]:
@@ -107,7 +122,7 @@ def _answer(question: str) -> None:
     messages.append({"role": "user", "content": question})
 
     with st.spinner("L'agent analyse les données…"):
-        agent = shared.build_agent()
+        agent = shared.build_agent(share_amounts=bool(st.session_state.get("ai_share_amounts", False)))
         result = agent.chat(question, history=history)
 
     text = result.get("text") or "Je n'ai pas pu produire de réponse."
@@ -124,7 +139,7 @@ def _briefing() -> None:
     )
     if st.button("📰 Générer le briefing", key="ai_briefing"):
         with st.spinner("Rédaction du briefing…"):
-            agent = shared.build_agent()
+            agent = shared.build_agent(share_amounts=bool(st.session_state.get("ai_share_amounts", False)))
             st.session_state["ai_briefing_text"] = agent.briefing()
 
     result = st.session_state.get("ai_briefing_text")
@@ -164,7 +179,7 @@ def _company() -> None:
 
     if launch:
         with st.spinner("Analyse complète en cours…"):
-            agent = shared.build_agent()
+            agent = shared.build_agent(share_amounts=bool(st.session_state.get("ai_share_amounts", False)))
             st.session_state["ai_company_result"] = agent.analyse_company(symbol)
 
     result = st.session_state.get("ai_company_result")

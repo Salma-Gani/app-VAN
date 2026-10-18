@@ -1,8 +1,10 @@
-# 📈 EcoInvest Pro
+# 🧭 ATLAS FINANCE
 
 **Écosystème d'analyse, de simulation et d'aide à la décision sur les marchés — Bourse de Casablanca et marchés internationaux.**
 
 Application **Streamlit** complète, en français, construite uniquement sur des **données de marché réelles** (API publique de la Bourse de Casablanca, Yahoo Finance, flux RSS publics). Aucune donnée fondamentale n'est inventée : ce qui n'est pas disponible est signalé comme tel et peut être saisi ou importé.
+
+**ATLAS FINANCE** est un centre de pilotage financier : accueil éditorial, navigation par grandes catégories, vue de marché synthétique, analyse explicable et comparaison honnête des alternatives.
 
 ---
 
@@ -10,7 +12,7 @@ Application **Streamlit** complète, en français, construite uniquement sur des
 
 - [Aperçu](#aperçu)
 - [Lancement rapide](#lancement-rapide)
-- [Les 11 pages](#les-11-pages)
+- [Les 12 pages](#les-12-pages)
 - [Sources de données et transparence](#sources-de-données-et-transparence)
 - [Renseigner les données fondamentales](#renseigner-les-données-fondamentales)
 - [Agent IA](#agent-ia)
@@ -23,7 +25,7 @@ Application **Streamlit** complète, en français, construite uniquement sur des
 
 ## Aperçu
 
-EcoInvest Pro réunit dans une seule interface :
+ATLAS FINANCE réunit dans une seule interface :
 
 | Domaine | Ce que fait l'application |
 |---|---|
@@ -33,12 +35,12 @@ EcoInvest Pro réunit dans une seule interface :
 | **Valorisation** | DCF complet, matrice de sensibilité, trois scénarios, Monte-Carlo (4 000 simulations), valorisation relative sectorielle |
 | **Profil investisseur** | Revenus (salaire), charges, patrimoine, dettes, horizon, tolérance au risque, positions détenues |
 | **Simulateur** | Projection déterministe, 2 000 trajectoires Monte-Carlo, comparaison de 9 classes d'actifs, frontière efficiente |
-| **Portefeuille & arbitrage** | Allocation actuelle vs cible, plan de rééquilibrage chiffré, comparaison de chaque ligne à la meilleure opportunité |
+| **Portefeuille & alternatives** | Allocation actuelle vs cible, plan de rééquilibrage chiffré, comparaison de chaque ligne à la meilleure opportunité |
 | **Actualités** | Agrégation RSS, déduplication, sentiment par article et par secteur |
-| **Agent IA** | Chat conversationnel, briefing de marché, analyse de société — LLM détecté automatiquement ou analyste local hors-ligne |
+| **AI Market Intelligence** | Chat conversationnel, briefing de marché, analyse de société — LLM détecté automatiquement ou analyste local hors-ligne ; facteurs favorables/défavorables, données manquantes et niveau de confiance explicites |
 | **Outils** | Comparateur de projets VAN / TRI / payback (outil historique conservé) |
 
-Le thème est un « terminal financier » sombre (fond `#070C16`, accent `#22D3A6`), avec des graphiques Plotly interactifs et un template `ecoinvest` dédié.
+Le design s'inspire de la densité analytique de Bloomberg et de la clarté éditoriale de Reuters, avec une identité propre : fond blanc cassé, bleu marine, vert turquoise, typographie serif pour les titres et graphiques Plotly lisibles sur fond clair (template `atlas`).
 
 ---
 
@@ -49,7 +51,7 @@ cd app-VAN
 python3 -m venv .venv
 source .venv/bin/activate          # Windows : .venv\Scripts\activate
 pip install -r requirements.txt
-streamlit run app.py
+python3 -m streamlit run app.py
 ```
 
 L'application s'ouvre sur `http://localhost:8501`.
@@ -72,11 +74,12 @@ Le script télécharge les indices, les 81 valeurs, les dividendes, le VIX, les 
 
 ---
 
-## Les 11 pages
+## Les 12 pages
 
 | Page | Contenu |
 |---|---|
-| 🏠 **Tableau de bord** | MASI, largeur de marché, VIX, sentiment des news, capitalisation ; graphique MASI 6 mois ; jauge VIX et décomposition du régime ; treemap sectorielle ; hausses/baisses et volumes ; nuage risque/rendement ; briefing IA à la demande ; marchés internationaux et macro |
+| 🧭 **Accueil** | Centre de pilotage : hero éditorial, recherche d'une valeur, six catégories, Market Pulse (indices, VIX, largeur), graphique MASI, mouvements, actualités et lecture explicable |
+| 🏠 **Vue globale du marché** | MASI, largeur de marché, VIX, sentiment des news, capitalisation ; graphique MASI 6 mois ; jauge VIX et décomposition du régime ; treemap sectorielle ; hausses/baisses et volumes ; nuage risque/rendement ; briefing IA à la demande ; marchés internationaux et macro |
 | 🔍 **Screener BVC** | Filtres complets, KPI de sélection, synthèse par secteur, tableau interactif (sélection d'une ligne → ouverture de la fiche société), export CSV, top opportunités |
 | 🏢 **Analyse société** | En-tête cours/secteur/signaux, KPI, onglets Synthèse / Technique / Fondamentaux / Actualités / Agent IA ; comparaison Base 100 vs MASI ; radar multifactoriel ; plan d'entrée |
 | 📰 **Actualités & sentiment** | Sentiment 7 jours, sentiment sectoriel, répartition par source, filtres (recherche, source, tonalité, fenêtre), cartes d'articles cliquables |
@@ -170,6 +173,8 @@ Configuration, sans redémarrage :
 
 L'agent ne dispose **que** des données chargées par l'application : marché, régime, secteurs, ratios disponibles, profil et positions. Aucun chiffre n'est inventé.
 
+**Confidentialité** : par défaut, les montants personnels (revenus, patrimoine, dettes, objectifs) **ne sont pas transmis** au modèle. Seuls le profil de risque, les ratios d'épargne, l'horizon et les poids du portefeuille sont envoyés. Un réglage explicite dans *AI Market Intelligence* permet d'autoriser le partage des montants ; il est sans effet en mode analyste local, où aucune donnée ne quitte la machine. Les données restent dans `data/user/`, jamais versionnées.
+
 ---
 
 ## Architecture du projet
@@ -187,7 +192,7 @@ app-VAN/
 │   └── user/                     # Profil, positions, fondamentaux, clés IA, watchlist
 └── ecoinvest/
     ├── config.py                 # Chemins, palette, TTL, hypothèses de marché
-    ├── theme.py                  # CSS, template Plotly « ecoinvest », setup_page
+    ├── theme.py                  # CSS, template Plotly « atlas », setup_page
     ├── data/
     │   ├── bvc.py                # API BVC, historiques, référentiel, dividendes
     │   ├── market.py             # Yahoo Finance : VIX, indices, macro, devises
@@ -209,7 +214,7 @@ app-VAN/
     ├── ui/
     │   ├── components.py         # Cartes KPI, badges, tableaux, notes, verdicts
     │   ├── charts.py             # Toutes les figures Plotly
-    │   └── pages/                # Les 11 pages + shared.py (chargements cachés)
+    │   └── pages/                # Les 12 pages + shared.py (chargements cachés)
     └── utils/
         ├── cache.py              # Cache SQLite + mémoire
         ├── formatting.py         # Formatage français (MAD, %, multiples)
