@@ -1,0 +1,492 @@
+{
+ "source": "casablanca-bourse.com/market-data/cours",
+ "generated_at": "2026-10-18T09:56:35",
+ "instruments": [
+  {
+   "symbol": "M2M",
+   "name": "M2M Group",
+   "name_en": "M2M Group",
+   "name_ar": "مجموعة م2م"
+  },
+  {
+   "symbol": "ATL",
+   "name": "ATLANTASANAD",
+   "name_en": "ATLANTASANAD",
+   "name_ar": "أطلنطا سند"
+  },
+  {
+   "symbol": "SNA",
+   "name": "STOKVIS NORD AFRIQUE",
+   "name_en": "STOKVIS NORD AFRIQUE",
+   "name_ar": "سطوكفيس شمال إفريقيا"
+  },
+  {
+   "symbol": "SNP",
+   "name": "SNEP",
+   "name_en": "SNEP",
+   "name_ar": "سنيب"
+  },
+  {
+   "symbol": "MIC",
+   "name": "MICRODATA",
+   "name_en": "MICRODATA",
+   "name_ar": "مكروداتا"
+  },
+  {
+   "symbol": "SLF",
+   "name": "SALAFIN",
+   "name_en": "SALAFIN",
+   "name_ar": "سلفين"
+  },
+  {
+   "symbol": "DLM",
+   "name": "DELATTRE LEVIVIER MAROC",
+   "name_en": "DELATTRE LEVIVIER MAROC",
+   "name_ar": "دلاتر لفيفي المغرب"
+  },
+  {
+   "symbol": "DHO",
+   "name": "DELTA HOLDING",
+   "name_en": "DELTA HOLDING",
+   "name_ar": "دلتا هولدينغ"
+  },
+  {
+   "symbol": "BOA",
+   "name": "BANK OF AFRICA",
+   "name_en": "BANK OF AFRICA",
+   "name_ar": "بنك أفريقيا"
+  },
+  {
+   "symbol": "CMT",
+   "name": "MINIERE TOUISSIT",
+   "name_en": "MINIERE TOUISSIT",
+   "name_ar": "الشركة المنجمية لتويسيت"
+  },
+  {
+   "symbol": "LBV",
+   "name": "LABEL VIE",
+   "name_en": "LABEL VIE",
+   "name_ar": "لابيل ڤي"
+  },
+  {
+   "symbol": "ADI",
+   "name": "ALLIANCES",
+   "name_en": "ALLIANCES",
+   "name_ar": "أليانس"
+  },
+  {
+   "symbol": "NKL",
+   "name": "ENNAKL",
+   "name_en": "ENNAKL",
+   "name_ar": "النقل"
+  },
+  {
+   "symbol": "SAH",
+   "name": "SANLAM MAROC",
+   "name_en": "SANLAM MAROC",
+   "name_ar": "سنلام المغرب"
+  },
+  {
+   "symbol": "STR",
+   "name": "STROC INDUSTRIE",
+   "name_en": "STROC INDUSTRIE",
+   "name_ar": "ستروك للصناعة"
+  },
+  {
+   "symbol": "JET",
+   "name": "JET CONTRACTORS",
+   "name_en": "JET CONTRACTORS",
+   "name_ar": "جيت كونتراكترز"
+  },
+  {
+   "symbol": "AFI",
+   "name": "AFRIC INDUSTRIES SA",
+   "name_en": "AFRIC INDUSTRIES SA",
+   "name_ar": "أفريك أندوستري"
+  },
+  {
+   "symbol": "S2M",
+   "name": "S.M MONETIQUE",
+   "name_en": "S.M MONETIQUE",
+   "name_ar": "الشركة المغاربية للنقديات"
+  },
+  {
+   "symbol": "TQM",
+   "name": "TAQA MOROCCO",
+   "name_en": "TAQA MOROCCO",
+   "name_ar": "طاقة المغرب"
+  },
+  {
+   "symbol": "IMO",
+   "name": "IMMORENTE INVEST",
+   "name_en": "IMMORENTE INVEST",
+   "name_ar": "إمورانت للإستثمار"
+  },
+  {
+   "symbol": "RDS",
+   "name": "RESIDENCES DAR SAADA",
+   "name_en": "RESIDENCES DAR SAADA",
+   "name_ar": "إقامات دارالسعادة"
+  },
+  {
+   "symbol": "TMA",
+   "name": "TOTALENERGIES MARKETING MAROC",
+   "name_en": "TOTALENERGIES MARKETING MAROC",
+   "name_ar": "طوطال إنيرجي التسويق بالمغرب"
+  },
+  {
+   "symbol": "AFM",
+   "name": "AFMA",
+   "name_en": "AFMA",
+   "name_ar": "أفما"
+  },
+  {
+   "symbol": "MSA",
+   "name": "SODEP-Marsa Maroc",
+   "name_en": "SODEP-Marsa Maroc",
+   "name_ar": "شركة إستغلال الموانئ ـ مرسى المغرب"
+  },
+  {
+   "symbol": "SID",
+   "name": "SONASID",
+   "name_en": "SONASID",
+   "name_ar": "صوناسيد"
+  },
+  {
+   "symbol": "SMI",
+   "name": "SMI",
+   "name_en": "SMI",
+   "name_ar": "الشركة المعدنية إميطير"
+  },
+  {
+   "symbol": "MAB",
+   "name": "MAGHREBAIL",
+   "name_en": "MAGHREBAIL",
+   "name_ar": "مغرب باي"
+  },
+  {
+   "symbol": "SBM",
+   "name": "SOCIETE DES BOISSONS DU MAROC",
+   "name_en": "SOCIETE DES BOISSONS DU MAROC",
+   "name_ar": "شركة مشروبات المغرب"
+  },
+  {
+   "symbol": "MUT",
+   "name": "MUTANDIS SCA",
+   "name_en": "MUTANDIS SCA",
+   "name_ar": "موتانديس SCA"
+  },
+  {
+   "symbol": "CTM",
+   "name": "CTM",
+   "name_en": "CTM",
+   "name_ar": "ستيام"
+  },
+  {
+   "symbol": "EQD",
+   "name": "EQDOM",
+   "name_en": "EQDOM",
+   "name_ar": "إيكدوم"
+  },
+  {
+   "symbol": "MLE",
+   "name": "MAROC LEASING",
+   "name_en": "MAROC LEASING",
+   "name_ar": "المغربية للإيجار"
+  },
+  {
+   "symbol": "ARD",
+   "name": "ARADEI CAPITAL",
+   "name_en": "ARADEI CAPITAL",
+   "name_ar": "أراضي كابيتال"
+  },
+  {
+   "symbol": "TGC",
+   "name": "TGCC S.A",
+   "name_en": "TGCC S.A",
+   "name_ar": "شركة الأشغال العامة للبناء بالدار البيضاء ش.م"
+  },
+  {
+   "symbol": "CIH",
+   "name": "CIH",
+   "name_en": "CIH",
+   "name_ar": "القرض العقاري والسياحي"
+  },
+  {
+   "symbol": "DYT",
+   "name": "DISTY TECHNOLOGIES",
+   "name_en": "DISTY TECHNOLOGIES",
+   "name_ar": "ديستي تكنولوجيز"
+  },
+  {
+   "symbol": "ATH",
+   "name": "AUTO HALL",
+   "name_en": "AUTO HALL",
+   "name_ar": "أوطوهال"
+  },
+  {
+   "symbol": "BAL",
+   "name": "BALIMA",
+   "name_en": "BALIMA",
+   "name_ar": "باليما"
+  },
+  {
+   "symbol": "AKT",
+   "name": "AKDITAL",
+   "name_en": "AKDITAL",
+   "name_ar": "أكديتال"
+  },
+  {
+   "symbol": "CDM",
+   "name": "CDM",
+   "name_en": "CDM",
+   "name_ar": "مصرف المغرب"
+  },
+  {
+   "symbol": "CFG",
+   "name": "CFG BANK",
+   "name_en": "CFG BANK",
+   "name_ar": "بنك CFG"
+  },
+  {
+   "symbol": "LHM",
+   "name": "Holcim Maroc S.A",
+   "name_en": "Holcim Maroc S.A",
+   "name_ar": "هولسيم المغرب ش.م"
+  },
+  {
+   "symbol": "CMA",
+   "name": "CIMENTS DU MAROC",
+   "name_en": "CIMENTS DU MAROC",
+   "name_ar": "إسمنت المغرب"
+  },
+  {
+   "symbol": "CMG",
+   "name": "CMGP GROUP",
+   "name_en": "CMGP GROUP",
+   "name_ar": "CMGP مجموعة"
+  },
+  {
+   "symbol": "CSR",
+   "name": "COSUMAR",
+   "name_en": "COSUMAR",
+   "name_ar": "كوسومار"
+  },
+  {
+   "symbol": "DIS",
+   "name": "DIAC SALAF",
+   "name_en": "DIAC SALAF",
+   "name_ar": "دياك سلف"
+  },
+  {
+   "symbol": "VCN",
+   "name": "VICENNE",
+   "name_en": "VICENNE",
+   "name_ar": "فيسان"
+  },
+  {
+   "symbol": "CAP",
+   "name": "CASH PLUS S.A",
+   "name_en": "CASH PLUS S.A",
+   "name_ar": "كاش بلوس ش.م"
+  },
+  {
+   "symbol": "GTM",
+   "name": "SGTM S.A",
+   "name_en": "SGTM S.A",
+   "name_ar": "الشركة العامة المغربية للأشغال ش.م"
+  },
+  {
+   "symbol": "LES",
+   "name": "LESIEUR CRISTAL",
+   "name_en": "LESIEUR CRISTAL",
+   "name_ar": "لوسيور كريسطال"
+  },
+  {
+   "symbol": "BCI",
+   "name": "BMCI",
+   "name_en": "BMCI",
+   "name_ar": "البنك المغربي للتجارة والصناعة"
+  },
+  {
+   "symbol": "OUL",
+   "name": "OULMES",
+   "name_en": "OULMES",
+   "name_ar": "أولماس"
+  },
+  {
+   "symbol": "REB",
+   "name": "REBAB COMPANY",
+   "name_en": "REBAB COMPANY",
+   "name_ar": "رباب"
+  },
+  {
+   "symbol": "ZDJ",
+   "name": "ZELLIDJA S.A",
+   "name_en": "ZELLIDJA S.A",
+   "name_ar": "زليجة"
+  },
+  {
+   "symbol": "WAA",
+   "name": "WAFA ASSURANCE",
+   "name_en": "WAFA ASSURANCE",
+   "name_ar": "تأمين الوفاء"
+  },
+  {
+   "symbol": "MDP",
+   "name": "MED PAPER",
+   "name_en": "MED PAPER",
+   "name_ar": "ميد بايبر"
+  },
+  {
+   "symbol": "ALM",
+   "name": "ALUMINIUM DU MAROC",
+   "name_en": "ALUMINIUM DU MAROC",
+   "name_ar": "ألومنيوم المغرب"
+  },
+  {
+   "symbol": "AGM",
+   "name": "AGMA",
+   "name_en": "AGMA",
+   "name_ar": "أكما"
+  },
+  {
+   "symbol": "SAM",
+   "name": "SAMIR",
+   "name_en": "SAMIR",
+   "name_ar": "سامير"
+  },
+  {
+   "symbol": "NEJ",
+   "name": "AUTO NEJMA",
+   "name_en": "AUTO NEJMA",
+   "name_ar": "أوطو نجمة"
+  },
+  {
+   "symbol": "GAZ",
+   "name": "AFRIQUIA GAZ",
+   "name_en": "AFRIQUIA GAZ",
+   "name_ar": "أفريقيا غاز"
+  },
+  {
+   "symbol": "MOX",
+   "name": "MAGHREB OXYGENE",
+   "name_en": "MAGHREB OXYGENE",
+   "name_ar": "مغرب أوكسجين"
+  },
+  {
+   "symbol": "MNG",
+   "name": "MANAGEM",
+   "name_en": "MANAGEM",
+   "name_ar": "مناجم"
+  },
+  {
+   "symbol": "UMR",
+   "name": "UNIMER",
+   "name_en": "UNIMER",
+   "name_ar": "أونيمير"
+  },
+  {
+   "symbol": "IBC",
+   "name": "IB MAROC.COM",
+   "name_en": "IB MAROC.COM",
+   "name_ar": "اب مغرب كوم"
+  },
+  {
+   "symbol": "BCP",
+   "name": "BCP",
+   "name_en": "BCP",
+   "name_ar": "البنك الشعبي المركزي"
+  },
+  {
+   "symbol": "IAM",
+   "name": "ITISSALAT AL-MAGHRIB",
+   "name_en": "ITISSALAT AL-MAGHRIB",
+   "name_ar": "إتصالات المغرب"
+  },
+  {
+   "symbol": "ATW",
+   "name": "ATTIJARIWAFA BANK",
+   "name_en": "ATTIJARIWAFA BANK",
+   "name_ar": "التجاري وفا بنك"
+  },
+  {
+   "symbol": "DRI",
+   "name": "DARI COUSPATE",
+   "name_en": "DARI COUSPATE",
+   "name_ar": "داري كوسباط"
+  },
+  {
+   "symbol": "RIS",
+   "name": "RISMA",
+   "name_en": "RISMA",
+   "name_ar": "ريسما"
+  },
+  {
+   "symbol": "CRS",
+   "name": "CARTIER SAADA",
+   "name_en": "CARTIER SAADA",
+   "name_ar": "كارتي سعادة"
+  },
+  {
+   "symbol": "ADH",
+   "name": "DOUJA PROM ADDOHA",
+   "name_en": "DOUJA PROM ADDOHA",
+   "name_ar": "دجى الإنعاش الضحى"
+  },
+  {
+   "symbol": "COL",
+   "name": "COLORADO",
+   "name_en": "COLORADO",
+   "name_ar": "كولورادو"
+  },
+  {
+   "symbol": "FBR",
+   "name": "FENIE BROSSETTE",
+   "name_en": "FENIE BROSSETTE",
+   "name_ar": "فينيي بروسيت"
+  },
+  {
+   "symbol": "SRM",
+   "name": "REALISATIONS MECANIQUES",
+   "name_en": "REALISATIONS MECANIQUES",
+   "name_ar": "شركة المنجزات الميكانيكية"
+  },
+  {
+   "symbol": "INV",
+   "name": "INVOLYS",
+   "name_en": "INVOLYS",
+   "name_ar": "إنفوليس"
+  },
+  {
+   "symbol": "HPS",
+   "name": "HPS",
+   "name_en": "HPS",
+   "name_ar": "هايتك بيمنت سيستم"
+  },
+  {
+   "symbol": "DWY",
+   "name": "DISWAY",
+   "name_en": "DISWAY",
+   "name_ar": "ديسواي"
+  },
+  {
+   "symbol": "SOT",
+   "name": "SOTHEMA",
+   "name_en": "SOTHEMA",
+   "name_ar": "سوطيما"
+  },
+  {
+   "symbol": "PRO",
+   "name": "PROMOPHARM S.A.",
+   "name_en": "PROMOPHARM S.A.",
+   "name_ar": "بروموفارم"
+  },
+  {
+   "symbol": "T2S",
+   "name": "T2S GROUP HOLDING",
+   "name_en": "T2S GROUP HOLDING",
+   "name_ar": "مجموعة تقنيات علم و صحة"
+  }
+ ]
+}

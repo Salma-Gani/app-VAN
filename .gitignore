@@ -1,0 +1,20 @@
+# ─── Données locales (jamais versionnées) ───
+data/cache/
+data/user/
+data/seed/fundamentals_coverage.csv
+
+# ─── Secrets et configuration locale ───
+.env
+
+# ─── Python ───
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# ─── Divers ───
+.DS_Store
+.idea/
+.vscode/
