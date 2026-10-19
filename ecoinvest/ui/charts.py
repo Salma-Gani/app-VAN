@@ -391,8 +391,9 @@ def sector_treemap(df: pd.DataFrame, height: int = 520,
     metric = pd.to_numeric(sub[color_col], errors="coerce") if color_col in sub.columns else pd.Series(
         np.nan, index=sub.index
     )
-    if color_col == "change_pct":
-        # Variation en fraction → points de pourcentage pour l'affichage.
+    # Les colonnes de performance BVC sont stockées en fraction : on les exprime en
+    # points de pourcentage pour l'affichage (le calcul sous-jacent reste inchangé).
+    if color_col in {"change_pct", "ytd_pct", "return_1m", "return_3m", "return_6m", "return_12m"}:
         metric = metric * 100.0
     sub["_metric"] = metric
 
