@@ -903,7 +903,7 @@ def _fetch_html(url: str) -> str:
         raise StatementError(f"AMMC injoignable ({url}) : {exc}") from exc
 
 
-def ammc_documents(issuer: str, max_pages: int = 6, limit: int = 12,
+def ammc_documents(issuer: str, max_pages: int = 10, limit: int = 12,
                    with_pdf: bool = True) -> List[Dict[str, Any]]:
     """Liste les états financiers publiés par l'AMMC pour un émetteur.
 
@@ -920,13 +920,13 @@ def ammc_documents(issuer: str, max_pages: int = 6, limit: int = 12,
 
     tokens = [tok for tok in query.split() if len(tok) > 2]
     found: List[Dict[str, Any]] = []
+    seen_urls: set = set()
     for page in range(max_pages):
         url = AMMC_LIST if page == 0 else f"{AMMC_LIST}?page={page}"
         try:
             markup = _fetch_html(url)
         except StatementError:
             break
-        matched_any = False
         for row in _ROW_RE.findall(markup):
             detail = _DETAIL_RE.search(row)
             if not detail:
@@ -934,18 +934,21 @@ def ammc_documents(issuer: str, max_pages: int = 6, limit: int = 12,
             text = _normalise(_strip_tags(row))
             if tokens and not all(token in text for token in tokens):
                 continue
-            matched_any = True
             clean = _strip_tags(row)
+            link = f"{AMMC_BASE}{detail.group(1)}"
+            if link in seen_urls:
+                continue
+            seen_urls.add(link)
             year = re.search(r"(20\d{2})", clean)
             found.append({
                 "title": clean,
                 "year": year.group(1) if year else None,
-                "url": f"{AMMC_BASE}{detail.group(1)}",
+                "url": link,
                 "pdf_url": None,
             })
             if len(found) >= limit:
                 break
-        if len(found) >= limit or not matched_any:
+        if len(found) >= limit:
             break
 
     if with_pdf:

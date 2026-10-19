@@ -82,5 +82,39 @@ class TestPdfHelpers(unittest.TestCase):
         self.assertIn(("balance", "total_assets"), fields)
 
 
+class TestAmmcSearch(unittest.TestCase):
+    """La recherche AMMC ne doit pas s'arrêter à la première page sans correspondance."""
+
+    def setUp(self) -> None:
+        from ecoinvest.utils import cache as cache_mod
+        cache_mod.clear(stmt.NS)
+
+    def test_finds_issuer_on_a_later_page(self) -> None:
+        target = ("<table><tr><td>"
+                  "<a href=\"/fr/espace-emetteurs/etats-financiers/acme-rfa-2025\">"
+                  "ACME 2025 Rapports annuels</a></td></tr></table>")
+        empty = "<table><tr><td>OTHER COMPANY 2026 Rapports 1er semestre</td></tr></table>"
+
+        def fake_fetch(url: str) -> str:
+            if url == stmt.AMMC_LIST:
+                return empty
+            if url.endswith("page=1"):
+                return target
+            return "<table></table>"
+
+        original = stmt._fetch_html
+        stmt._fetch_html = fake_fetch
+        try:
+            docs = stmt.ammc_documents("ACME", max_pages=2, limit=4, with_pdf=False)
+        finally:
+            stmt._fetch_html = original
+            from ecoinvest.utils import cache as cache_mod
+            cache_mod.clear(stmt.NS)
+
+        self.assertEqual(len(docs), 1)
+        self.assertIn("acme-rfa-2025", docs[0]["url"])
+        self.assertEqual(docs[0]["year"], "2025")
+
+
 if __name__ == "__main__":
     unittest.main()
