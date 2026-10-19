@@ -21,6 +21,7 @@ Application **Streamlit** complète, en français, construite uniquement sur des
 - [Architecture du projet](#architecture-du-projet)
 - [Performance et cache](#performance-et-cache)
 - [Hypothèses financières](#hypothèses-financières)
+- [Cas vérifiable](#cas-vérifiable)
 - [Limites et avertissement](#limites-et-avertissement)
 
 ---
@@ -34,14 +35,14 @@ MARKET MIND réunit dans une seule interface :
 | **Parcours d'analyse** | Un fil conducteur en 5 étapes (comprendre → analyser → valoriser → surveiller → portefeuille) autour d'une même valeur, avec l'état de chaque étape et les manques à combler |
 | **Marché BVC** | 81 valeurs cotées, 24 indices sectoriels, indices MASI / MASI 20, capitalisation, volumes, secteurs officiels |
 | **Screener** | Filtres par secteur, signal, capitalisation, score, P/E, dividende, volume, Sharpe, volatilité ; export CSV |
-| **Analyse société** | Chandeliers, moyennes mobiles, RSI/MACD, niveaux clés, plan d'entrée, ratios interprétés, actualités, analyse IA |
+| **Analyse société** | Chandeliers, moyennes mobiles, RSI/MACD, niveaux clés, plan d'entrée, ratios interprétés, actualités, **backtest** (coûts inclus, hors échantillon), analyse IA |
 | **États financiers** | Bilan, compte de produits et charges, tableau de trésorerie sourcés (jeu vérifié AMMC, API EODHD/FMP/Yahoo, import CSV, documents officiels AMMC) ; aucun poste extrapolé |
-| **Valorisation** | **Valuation Lab** : PER × BPA, EV/EBITDA, EV/EBIT, P/B, P/S, rendement du dividende, prix théorique, marge de sécurité et **prix d'entrée** ; DCF complet, sensibilité, trois scénarios, Monte-Carlo (4 000 simulations), valorisation relative sectorielle |
+| **Valorisation** | **Valuation Lab** : PER × BPA, EV/EBITDA, EV/EBIT, P/B, P/S, rendement du dividende, prix théorique, marge de sécurité et **prix d'entrée** ; DCF complet, sensibilité, trois scénarios, **distribution Monte-Carlo (P5–P95)** ; **trajectoires de prix (GBM)** reproductibles (graine) avec bandes P5–P25–P50–P75–P95 et probabilité de finir au-dessus du cours initial ; **valorisation relative** vs médiane sectorielle et comparables (P/E, P/B, P/S, EV/EBITDA, ROE, rendement) |
 | **Thèses & surveillance** | **Valuation & Trigger Engine** : enregistrement d'une thèse (multiple cible, marge, métrique de référence, exercice, source) puis suivi des deux conditions — prix d'entrée atteint et mise à jour de la métrique (BPA, EBITDA, fonds propres, dividende) |
 | **Profil investisseur** | Revenus (salaire), charges, patrimoine, dettes, horizon, tolérance au risque, positions détenues |
 | **Simulateur** | Projection déterministe, 2 000 trajectoires Monte-Carlo, comparaison de 9 classes d'actifs, frontière efficiente |
-| **Portefeuille & alternatives** | Allocation actuelle vs cible, plan de rééquilibrage chiffré, comparaison de chaque ligne à la meilleure opportunité |
-| **Actualités** | Agrégation RSS, déduplication, sentiment par article et par secteur |
+| **Portefeuille & alternatives** | Allocation actuelle vs cible, plan de rééquilibrage chiffré, comparaison de chaque ligne à la meilleure opportunité, **allocation sectorielle du portefeuille vs capitalisation de la Bourse** |
+| **Actualités** | Agrégation RSS, déduplication, sentiment par article et par secteur, **catégorie thématique** et **impact potentiel** distincts du ton de l'article, rattachement aux **positions du portefeuille** |
 | **Market Mind AI** | Analyse directe d'une valeur (tendance, support/résistance, RSI, actualités, macro), chat, briefing, analyse complète, **rapport PDF téléchargeable** ; LLM détecté automatiquement ou analyste local hors-ligne ; facteurs favorables/défavorables, contradictions, données manquantes et confiance explicites |
 | **Alertes & surveillance** | Scanner local : support/résistance, RSI, drawdown, variation journalière, plus haut/bas 52 semaines et VIX ; seuils modifiables, export CSV, aucune notification push |
 | **Outils** | Comparateur de projets VAN / TRI / payback (outil historique conservé), sources et méthodologie |
@@ -357,6 +358,23 @@ Valeurs par défaut, modifiables dans `ecoinvest/config.py` et, pour le taux san
 | Frais de courtage (aller-retour) | 0,60 % |
 
 Le coût des fonds propres du DCF est estimé par le CAPM : taux sans risque + bêta × prime de risque actions.
+
+---
+
+## Cas vérifiable
+
+Le document **[`docs/cas_verifiable.md`](docs/cas_verifiable.md)** déroule un cas **entièrement
+recalculable à la main** sur une société réellement cotée (TotalEnergies Marketing Maroc) :
+
+1. **Données sourcées** — rapport annuel 2024 publié par l'AMMC, avec lien direct ;
+2. **Valorisation manuelle** — BPA = résultat net / nombre d'actions, puis `prix = PER cible × BPA`
+   et prix d'entrée avec marge de sécurité ;
+3. **Deuxième méthode** — EV/EBITDA avec calcul détaillé de la dette nette et de la valeur d'entreprise ;
+4. **Scénarios** — DCF, sensibilité et distribution Monte-Carlo (P5–P95) ;
+5. **Apport de l'IA** — synthèse bornée aux données fournies, sans citation inventée ;
+6. **Limites** — connecteurs manquants, couverture comptable, nature heuristique du sentiment.
+
+Un **test de régression** (`tests/test_worked_example.py`) vérifie que ces chiffres restent exacts.
 
 ---
 

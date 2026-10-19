@@ -180,7 +180,11 @@ def _limits() -> None:
         "- **Aucune notification push/e-mail** : les alertes sont consultées localement dans l'application.\n"
         "- **Backtest illustratif disponible** (onglet « Backtest » de la fiche société) : coûts de "
         "transaction inclus, aucune anticipation, validation hors échantillon. Historique court, "
-        "fiscalité et liquidité réelle non modélisées — aucune performance future n'est garantie.",
+        "fiscalité et liquidité réelle non modélisées — aucune performance future n'est garantie.\n"
+        "- **Monte-Carlo** : les percentiles (P5–P95) et probabilités décrivent la distribution **du "
+        "modèle** (GBM ou DCF), pas des certitudes de marché ; la graine est affichée pour reproductibilité.\n"
+        "- **Sentiment et impact des actualités** : heuristiques par mots-clés, présentées comme "
+        "indicatives — elles ne remplacent pas une lecture humaine et ne prédisent rien.",
         "warn", "⚠️",
     )
     st.caption(

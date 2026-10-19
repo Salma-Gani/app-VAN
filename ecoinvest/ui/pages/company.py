@@ -173,6 +173,7 @@ def _overview(row: pd.Series, enriched: pd.DataFrame, summary: Dict[str, Any]) -
         if explain:
             ui.plot(charts.radar(explain, title="Profil multifactoriel", height=330),
                     key="company_radar")
+        _score_breakdown(row)
 
         plan = row.get("entry_plan")
         if isinstance(plan, dict):
@@ -241,6 +242,47 @@ def _explain(row: pd.Series) -> Dict[str, Optional[float]]:
         if points is not None:
             out[DIMENSION_LABELS[key]] = float(points)
     return out
+
+
+def _score_breakdown(row: pd.Series) -> None:
+    """Décomposition vérifiable du score composite : note × poids = contribution."""
+    from ...analytics.scoring import explain_score
+
+    detail = explain_score(row)
+    dims = detail.get("dimensions") or {}
+    present = {k: v for k, v in dims.items() if v.get("points") is not None}
+    if not present:
+        return
+    total_weight = sum(float(v["weight"]) for v in present.values()) or 1.0
+    rows = []
+    for key, info in present.items():
+        points = float(info["points"])
+        weight = float(info["weight"])
+        rows.append(
+            {
+                "Dimension": str(info["label"]),
+                "Note /100": round(points, 0),
+                "Poids": f"{weight / total_weight:.0%}",
+                "Contribution": round(points * weight / total_weight, 1),
+            }
+        )
+    composite = detail.get("composite")
+    rows.append(
+        {
+            "Dimension": "Score composite",
+            "Note /100": round(composite, 0) if composite is not None else "—",
+            "Poids": "100 %",
+            "Contribution": round(composite, 1) if composite is not None else "—",
+        }
+    )
+    with st.expander("🧮 Décomposition du score (note × poids)", expanded=False):
+        ui.table(pd.DataFrame(rows), height=min(340, 42 * (len(rows) + 1)),
+                 key="company_score_breakdown")
+        st.caption(
+            "La somme des contributions égale le score composite. Chaque dimension est une moyenne "
+            "pondérée de sous-critères bornés à 0–100 ; une dimension non renseignée est exclue et le "
+            "score est renormalisé sur les seules dimensions disponibles."
+        )
 
 
 def _verdict(row: pd.Series) -> Dict[str, str]:
@@ -336,6 +378,18 @@ def _technical(enriched: pd.DataFrame, summary: Dict[str, Any]) -> None:
             ],
             per_row=3,
         )
+
+    last = enriched["date"].iloc[-1] if "date" in enriched.columns else None
+    ui.note(
+        "**Trois niveaux à ne pas confondre.** (1) Le *signal technique* ci-dessus découle de règles "
+        "explicites (moyennes mobiles, RSI, MACD) appliquées à la dernière séance "
+        f"({str(last)[:10] if last is not None else 'date inconnue'}). (2) La *performance historique* "
+        "d'une règle est mesurée dans l'onglet « Backtest », frais de transaction inclus et validation "
+        "hors échantillon. (3) Une *recommandation d'investissement* exigerait en plus la valorisation, "
+        "les fondamentaux, le risque et la situation personnelle de l'investisseur : elle n'est pas "
+        "fournie par cette page.",
+        "info", "🧭",
+    )
 
 
 # ═══════════════════════════ Onglet Fondamentaux ═══════════════════════════

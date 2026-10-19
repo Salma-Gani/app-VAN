@@ -38,6 +38,8 @@ def render() -> None:
     _summary(filtered, table)
     st.divider()
     _results(filtered, params)
+    st.divider()
+    _sector_signals(filtered)
 
 
 # ═══════════════════════════ Filtres ═══════════════════════════
@@ -286,6 +288,39 @@ def _results(filtered: pd.DataFrame, params: Dict[str, Any]) -> None:
                     "« Données fondamentales » pour affiner les signaux.",
                     "warn", "⚙️",
                 )
+
+
+def _sector_signals(filtered: pd.DataFrame) -> None:
+    ui.section(
+        "Signaux par secteur",
+        "Pour chaque secteur : cours, variation, score composite et signaux, avec leur explication.",
+    )
+    if filtered.empty:
+        return
+    sectors = sorted([s for s in filtered["sector"].dropna().unique()])
+    for i, sector in enumerate(sectors):
+        sub = filtered[filtered["sector"] == sector].copy()
+        sub = sub.sort_values("composite_score", ascending=False, na_position="last")
+        with st.expander(f"{sector} — {len(sub)} valeur(s)", expanded=False):
+            view = pd.DataFrame(
+                {
+                    "Symbole": sub["symbol"],
+                    "Cours": pd.to_numeric(sub["close"], errors="coerce").round(2),
+                    "Séance %": (pd.to_numeric(sub["change_pct"], errors="coerce") * 100).round(2),
+                    "Score": pd.to_numeric(sub["composite_score"], errors="coerce").round(0),
+                    "Tendance": sub["trend_state"],
+                    "Momentum": sub["momentum_state"],
+                    "RSI": pd.to_numeric(sub["rsi14"], errors="coerce").round(0),
+                    "MACD hist.": pd.to_numeric(sub["macd_hist"], errors="coerce").round(3),
+                    "Signal": sub["signal"],
+                }
+            )
+            ui.table(view, height=min(420, 42 * (len(view) + 1)), key=f"scr_signals_{i}")
+    st.caption(
+        "Le **signal** résume des règles techniques et fondamentales explicites — la décomposition "
+        "note × poids figure sur la fiche de chaque valeur. Un score élevé **n'est pas** une "
+        "recommandation d'achat : valorisation, risque et situation personnelle s'examinent à part."
+    )
 
 
 def _column_config() -> Dict[str, Any]:

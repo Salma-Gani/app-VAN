@@ -166,6 +166,79 @@ def normalized_comparison(
     return fig
 
 
+# ═══════════════════════════ Simulation Monte-Carlo ═══════════════════════════
+
+
+def monte_carlo_paths(
+    mc: Dict[str, Any],
+    symbol: str = "",
+    height: int = 420,
+    show_paths: int = 60,
+) -> go.Figure:
+    """Trajectoires simulées, bandes de percentiles P5–P95 et cours initial."""
+    fig = go.Figure()
+    if not mc or not mc.get("available"):
+        return fig
+    pct = mc.get("percentiles") or {}
+    if "p50" not in pct:
+        return fig
+    x = list(range(len(pct["p50"])))
+
+    def band(lo: str, hi: str, fill: str) -> None:
+        fig.add_trace(go.Scatter(x=x, y=pct[hi], line=dict(width=0),
+                                 hoverinfo="skip", showlegend=False))
+        fig.add_trace(go.Scatter(x=x, y=pct[lo], line=dict(width=0), fill="tonexty",
+                                 fillcolor=fill, name=f"{lo.upper()}–{hi.upper()}",
+                                 hoverinfo="skip"))
+
+    band("p5", "p95", "rgba(30,136,229,0.10)")
+    band("p25", "p75", "rgba(30,136,229,0.18)")
+
+    sample = mc.get("sample")
+    if sample is not None:
+        for i in range(min(len(sample), max(int(show_paths), 0))):
+            fig.add_trace(go.Scatter(x=x, y=sample[i], mode="lines",
+                                     line=dict(color="rgba(120,120,120,0.20)", width=0.7),
+                                     hoverinfo="skip", showlegend=False))
+    fig.add_trace(go.Scatter(x=x, y=pct["p50"], name="Médiane (P50)", mode="lines",
+                             line=dict(color=C["primary"], width=2.4)))
+    fig.add_hline(y=mc["start"], line_color=C["warning"], line_dash="dash",
+                  annotation_text="Cours initial", annotation_font_color=C["warning"])
+    title = f"{symbol} — trajectoires simulées" if symbol else "Trajectoires simulées"
+    fig.update_layout(title=title, height=height, xaxis_title="Séance (jours ouvrés)",
+                      yaxis_title="Prix", hovermode="x unified")
+    return fig
+
+
+def final_distribution(
+    mc: Dict[str, Any],
+    price: Optional[float] = None,
+    title: str = "Distribution des prix finaux",
+    height: int = 320,
+) -> go.Figure:
+    """Histogramme des prix finaux avec médiane et cours initial."""
+    fig = go.Figure()
+    if not mc or not mc.get("available"):
+        return fig
+    final = np.asarray(mc.get("final", []), dtype=float)
+    if final.size == 0:
+        return fig
+    fig.add_trace(go.Histogram(x=final, nbinsx=60, marker_color=C["accent"],
+                               opacity=0.75, name="Prix finaux"))
+    fig.add_vline(x=float(mc["start"]), line_color=C["warning"], line_width=2,
+                  annotation_text="Cours initial", annotation_font_color=C["warning"])
+    fig.add_vline(x=float(mc["median_final"]), line_color=C["primary"], line_width=2,
+                  line_dash="dot", annotation_text="Médiane",
+                  annotation_font_color=C["primary"])
+    if price:
+        fig.add_vline(x=float(price), line_color=C["accent2"], line_width=1, line_dash="dash",
+                      annotation_text="Objectif", annotation_font_color=C["accent2"])
+    fig.update_layout(title=title, height=height, xaxis_title="Prix final simulé (MAD)",
+                      yaxis_title="Fréquence", showlegend=False,
+                      margin=dict(l=10, r=10, t=30, b=10))
+    return fig
+
+
 # ═══════════════════════════ Indicateurs ═══════════════════════════
 
 

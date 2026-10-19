@@ -180,6 +180,7 @@ def fetch_all_news(max_age_days: int = 14, force: bool = False) -> pd.DataFrame:
     df = df.drop_duplicates(subset=["dedup"]).drop(columns=["dedup"])
     df["sentiment"] = df.apply(lambda r: score_text(f"{r['title']} {r['summary']}"), axis=1)
     df["sentiment_label"] = df["sentiment"].apply(sentiment_label)
+    df = enrich_news(df)
     df = df.sort_values("published", ascending=False, na_position="last").reset_index(drop=True)
     cache.set(NS, key, df)
     return df
@@ -202,6 +203,7 @@ def google_news_query(query: str, limit: int = 25, force: bool = False) -> pd.Da
     if not df.empty:
         df["sentiment"] = df.apply(lambda r: score_text(f"{r['title']} {r['summary']}"), axis=1)
         df["sentiment_label"] = df["sentiment"].apply(sentiment_label)
+        df = enrich_news(df)
         cache.set(NS, key, df)
     return df
 
@@ -251,6 +253,105 @@ def sentiment_label(score: Optional[float]) -> str:
     if score <= -0.12:
         return "Négatif"
     return "Neutre"
+
+
+# ═══════════════════════════ Catégories et impact ═══════════════════════════
+# Sentiment (ton de l'article) et impact potentiel (matérialité estimée) sont DEUX
+# dimensions distinctes. La classification ci-dessous est heuristique (mots-clés)
+# et explicitement présentée comme indicative : elle ne remplace pas une lecture.
+
+CATEGORY_RULES: List[tuple] = [
+    ("Dividendes", ("dividende", "dividend", "coupon")),
+    ("Résultats", ("résultat", "resultat", "bénéfice", "bienefice", "chiffre d'affaires",
+                   "ebitda", "earnings", "profit", "revenus", "profit warning")),
+    ("Opérations sur titres", ("augmentation de capital", "fusion", "acquisition", "opa",
+                               "apport", "cession", "merger", "opération sur titres")),
+    ("Politique monétaire", ("bank al-maghrib", "taux directeur", "banque centrale", "bce",
+                             "fed", "taux d'intérêt", "monétaire", "policy rate")),
+    ("Inflation & prix", ("inflation", "ipc", "prix à la consommation", "cpi")),
+    ("Taux de change", ("dirham", "taux de change", "devise", "currency")),
+    ("Réglementation", ("ammc", "réglement", "reglement", "sanction", "amende", "régulateur",
+                        "regulation", "compliance")),
+    ("Énergie & matières premières", ("pétrole", "cours du baril", "matières premières",
+                                      "oil", "commodity")),
+    ("Secteur", ("secteur", "banque", "immobilier", "tourisme", "agroalimentaire", "btp",
+                 "télécom", "telecom", "assurance")),
+]
+
+_IMPACT_TOP = ("augmentation de capital", "fusion", "acquisition", "opa", "taux directeur",
+               "sanction", "amende", "faillite", "profit warning",
+               "avertissement sur résultats", "résultats annuels", "résultats semestriels")
+_IMPACT_STRONG = ("résultat", "bénéfice", "perte", "dividende", "fusion", "acquisition",
+                  "sanction", "amende", "faillite", "taux directeur", "augmentation de capital")
+
+
+def classify_category(text: str) -> str:
+    """Catégorie thématique (heuristique par mots-clés)."""
+    low = (text or "").lower()
+    for label, keywords in CATEGORY_RULES:
+        if any(k in low for k in keywords):
+            return label
+    return "Général"
+
+
+def impact_of(text: str, category: Optional[str] = None) -> Dict[str, Any]:
+    """Impact potentiel estimé (Faible/Moyen/Élevé), distinct du sentiment.
+
+    Renvoie le niveau et la **raison** (les mots-clés déclencheurs), pour que
+    l'estimation soit vérifiable plutôt qu'opaque.
+    """
+    low = (text or "").lower()
+    category = category or classify_category(text)
+    hits = [k for k in _IMPACT_TOP if k in low]
+    if hits:
+        return {"level": "Élevé", "reason": f"mention de « {hits[0]} »"}
+    strong = [k for k in _IMPACT_STRONG if k in low]
+    if len(strong) >= 2:
+        return {"level": "Élevé", "reason": f"{len(strong)} facteurs matériels : {', '.join(strong[:3])}"}
+    if len(strong) == 1:
+        return {"level": "Moyen", "reason": f"facteur matériel : {strong[0]}"}
+    if category in ("Politique monétaire", "Réglementation"):
+        return {"level": "Moyen", "reason": f"thème {category}"}
+    return {"level": "Faible", "reason": "aucun facteur matériel explicite"}
+
+
+def enrich_news(df: pd.DataFrame) -> pd.DataFrame:
+    """Ajoute `category`, `impact_level` et `impact_reason` (indicatifs)."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    title = out["title"].fillna("").astype(str) if "title" in out.columns else pd.Series([""] * len(out))
+    summary = out["summary"].fillna("").astype(str) if "summary" in out.columns else pd.Series([""] * len(out))
+    text = title + " " + summary
+    out["category"] = text.apply(classify_category)
+    impacts = text.apply(impact_of)
+    out["impact_level"] = [i["level"] for i in impacts]
+    out["impact_reason"] = [i["reason"] for i in impacts]
+    return out
+
+
+def holdings_relevance(df: pd.DataFrame, holdings: Sequence[Dict[str, Any]]) -> pd.DataFrame:
+    """Marque les articles mentionnant une société détenue (symbole ou nom)."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    if not holdings:
+        out["held"] = ""
+        return out
+    tags = []
+    for _, row in out.iterrows():
+        text = f"{row.get('title','')} {row.get('summary','')} {row.get('scope','')}".lower()
+        hits = []
+        for h in holdings:
+            symbol = str(h.get("symbol") or "").strip()
+            name = str(h.get("name") or "").strip()
+            if symbol and len(symbol) >= 2 and re.search(rf"\b{re.escape(symbol.lower())}\b", text):
+                hits.append(symbol.upper())
+            elif name and len(name) >= 4 and name.lower() in text:
+                hits.append(name)
+        tags.append(" · ".join(hits[:3]))
+    out["held"] = tags
+    return out
 
 
 def aggregate_sentiment(df: pd.DataFrame, days: int = 7) -> Dict[str, Any]:

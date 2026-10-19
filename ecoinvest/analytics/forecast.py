@@ -200,12 +200,19 @@ def monte_carlo_valuation(
     terminal_growth: float = 0.02,
     n_sims: int = 3000,
     price: Optional[float] = None,
+    seed: int = 11,
+    growth_sigma: float = 0.05,
+    discount_sigma: float = 0.012,
 ) -> Dict[str, Any]:
-    """Distribution Monte-Carlo de la valeur intrinsèque (croissance et taux incertains)."""
-    rng = np.random.default_rng(11)
-    growth = rng.normal(growth_mean, 0.05, size=(n_sims, years))
+    """Distribution Monte-Carlo de la valeur intrinsèque (croissance et taux incertains).
+
+    Le tirage est reproductible (``seed``), ce qui rend les tests et la démonstration
+    vérifiables. Chaque paramètre incertain est documenté dans ``assumptions``.
+    """
+    rng = np.random.default_rng(int(seed))
+    growth = rng.normal(growth_mean, growth_sigma, size=(n_sims, years))
     growth = np.clip(growth, -0.25, 0.45)
-    disc = np.clip(rng.normal(discount_rate, 0.012, size=(n_sims, 1)), 0.04, 0.30)
+    disc = np.clip(rng.normal(discount_rate, discount_sigma, size=(n_sims, 1)), 0.04, 0.30)
     tg = np.clip(rng.normal(terminal_growth, 0.005, size=(n_sims, 1)), 0.0, 0.04)
 
     fcf = np.zeros((n_sims, years))
@@ -222,19 +229,114 @@ def monte_carlo_valuation(
     per_share = equity / float(shares) if shares else equity
 
     out: Dict[str, Any] = {
+        "available": True,
         "median": float(np.median(per_share)),
         "mean": float(np.mean(per_share)),
+        "p5": float(np.percentile(per_share, 5)),
         "p10": float(np.percentile(per_share, 10)),
         "p25": float(np.percentile(per_share, 25)),
+        "p50": float(np.percentile(per_share, 50)),
         "p75": float(np.percentile(per_share, 75)),
         "p90": float(np.percentile(per_share, 90)),
+        "p95": float(np.percentile(per_share, 95)),
         "values": per_share,
         "prob_undervalued": None,
+        "seed": int(seed),
+        "n_sims": int(n_sims),
+        "assumptions": {
+            "model": "DCF : croissance et taux d'actualisation tirés (loi normale)",
+            "fcf_start": float(fcf_start),
+            "growth_mean": float(growth_mean),
+            "growth_sigma": float(growth_sigma),
+            "discount_rate": float(discount_rate),
+            "discount_sigma": float(discount_sigma),
+            "terminal_growth": float(terminal_growth),
+            "years": int(years),
+            "n_sims": int(n_sims),
+            "seed": int(seed),
+        },
     }
     if price:
         out["prob_undervalued"] = float((per_share > price).mean())
         out["expected_upside"] = float(np.median(per_share) / price - 1)
     return out
+
+
+# ═══════════════════════════ Trajectoires de prix ═══════════════════════════
+
+TRADING_DAYS = 252
+MIN_MC_OBSERVATIONS = 60
+
+
+def price_monte_carlo(
+    prices: Any,
+    horizon_days: int = 252,
+    n_sims: int = 2000,
+    seed: int = 7,
+    drift: Optional[float] = None,
+    volatility: Optional[float] = None,
+    sample_paths: int = 60,
+) -> Dict[str, Any]:
+    """Trajectoires de cours simulées par mouvement brownien géométrique (GBM).
+
+    Le modèle est calibré sur les rendements log réels de l'historique fourni :
+    dérive et volatilité annualisées (252 séances). La simulation est reproductible
+    (``seed``) et toutes les hypothèses sont renvoyées pour affichage. Aucun prix
+    n'est inventé : le point de départ est la dernière clôture observée.
+    """
+    series = pd.Series(prices).astype(float).dropna()
+    series = series[series > 0]
+    n = int(len(series))
+    if n < MIN_MC_OBSERVATIONS:
+        return {"available": False,
+                "reason": f"Historique insuffisant ({n} séances, minimum {MIN_MC_OBSERVATIONS}) "
+                          f"pour calibrer un modèle de prix."}
+
+    horizon_days = max(int(horizon_days), 1)
+    n_sims = max(int(n_sims), 1)
+    log_returns = np.log(series / series.shift(1)).dropna()
+    estimated_drift = float(log_returns.mean()) * TRADING_DAYS
+    estimated_vol = float(log_returns.std(ddof=1)) * float(np.sqrt(TRADING_DAYS))
+    mu = float(drift) if drift is not None else estimated_drift
+    sigma = float(volatility) if volatility is not None else estimated_vol
+    sigma = max(sigma, 1e-6)
+
+    dt = 1.0 / TRADING_DAYS
+    rng = np.random.default_rng(int(seed))
+    shocks = rng.normal((mu - 0.5 * sigma ** 2) * dt, sigma * float(np.sqrt(dt)),
+                        size=(n_sims, horizon_days))
+    start = float(series.iloc[-1])
+    paths = start * np.exp(np.cumsum(shocks, axis=1))
+    paths = np.concatenate([np.full((n_sims, 1), start), paths], axis=1)
+
+    percentiles = {f"p{p}": np.percentile(paths, p, axis=0) for p in (5, 25, 50, 75, 95)}
+    final = paths[:, -1]
+    return {
+        "available": True,
+        "model": "Mouvement brownien géométrique (GBM)",
+        "start": start,
+        "horizon_days": horizon_days,
+        "n_sims": n_sims,
+        "seed": int(seed),
+        "drift_annual": mu,
+        "volatility_annual": sigma,
+        "estimated_drift": estimated_drift,
+        "estimated_volatility": estimated_vol,
+        "drift_source": "paramètre utilisateur" if drift is not None else "estimé sur l'historique",
+        "volatility_source": "paramètre utilisateur" if volatility is not None else "estimée sur l'historique",
+        "observations": n,
+        "period_start": series.index[0] if isinstance(series.index, pd.DatetimeIndex) else None,
+        "period_end": series.index[-1] if isinstance(series.index, pd.DatetimeIndex) else None,
+        "percentiles": percentiles,
+        "sample": paths[:max(int(sample_paths), 0)],
+        "final": final,
+        "median_final": float(np.median(final)),
+        "p5_final": float(np.percentile(final, 5)),
+        "p95_final": float(np.percentile(final, 95)),
+        "prob_above": float((final > start).mean()),
+        "prob_below": float((final < start).mean()),
+        "expected_return": float(np.median(final) / start - 1) if start else None,
+    }
 
 
 # ═══════════════════════════ Simulation de portefeuille ═══════════════════════════
@@ -263,11 +365,13 @@ def portfolio_fan_chart(
     # Croissance composée du versement (approximation discrète mensuelle)
 
     percentiles = {
+        "p5": np.percentile(paths, 5, axis=0),
         "p10": np.percentile(paths, 10, axis=0),
         "p25": np.percentile(paths, 25, axis=0),
         "p50": np.percentile(paths, 50, axis=0),
         "p75": np.percentile(paths, 75, axis=0),
         "p90": np.percentile(paths, 90, axis=0),
+        "p95": np.percentile(paths, 95, axis=0),
     }
     invested = np.array([float(initial) + float(monthly) * m for m in range(months + 1)])
     return {
@@ -276,8 +380,10 @@ def portfolio_fan_chart(
         "invested": invested,
         "final": paths[:, -1],
         "final_median": float(np.median(paths[:, -1])),
+        "final_p5": float(np.percentile(paths[:, -1], 5)),
         "final_p10": float(np.percentile(paths[:, -1], 10)),
         "final_p90": float(np.percentile(paths[:, -1], 90)),
+        "final_p95": float(np.percentile(paths[:, -1], 95)),
         "total_invested": float(invested[-1]),
         "prob_loss": float((paths[:, -1] < invested[-1]).mean()),
         "prob_target": None,

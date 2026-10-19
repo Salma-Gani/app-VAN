@@ -94,6 +94,8 @@ def render() -> None:
     st.divider()
     _monte_carlo(result, assumptions, row)
     st.divider()
+    _price_monte_carlo(symbol, row)
+    st.divider()
     _relative(row, symbol)
     ui.disclaimer()
 
@@ -745,6 +747,96 @@ def _scenarios(result: Dict[str, Any], assumptions: Dict[str, Any]) -> None:
 # ═══════════════════════════ Monte-Carlo ═══════════════════════════
 
 
+def _price_monte_carlo(symbol: str, row: pd.Series) -> None:
+    ui.section(
+        "Trajectoires de prix (Monte-Carlo)",
+        "Simulation du cours futur par mouvement brownien géométrique, calibré sur l'historique réel.",
+    )
+    hist = shared.stock_history(symbol)
+    if hist is None or hist.empty or "close" not in hist.columns:
+        ui.note("Historique de cours indisponible : la simulation de trajectoires est impossible.",
+                "warn", "📉")
+        return
+    frame = hist.dropna(subset=["close"])
+    prices = pd.Series(frame["close"].to_numpy(dtype=float),
+                       index=pd.to_datetime(frame["date"])).sort_index()
+    prices = prices[prices > 0]
+    if len(prices) < forecast.MIN_MC_OBSERVATIONS:
+        ui.note(f"Historique trop court ({len(prices)} séances) pour calibrer le modèle.",
+                "warn", "📉")
+        return
+
+    cols = st.columns(4)
+    with cols[0]:
+        horizon = st.selectbox(
+            "Horizon", [63, 126, 252, 504], index=2,
+            format_func=lambda d: f"{d} séances (~{round(d / 21)} mois)", key="mc_horizon",
+        )
+    with cols[1]:
+        n_sims = st.select_slider("Simulations", [500, 1000, 2000, 5000, 10000], value=2000,
+                                  key="mc_sims")
+    with cols[2]:
+        seed = st.number_input("Graine aléatoire", value=7, min_value=0, step=1, key="mc_seed")
+    with cols[3]:
+        mode = st.selectbox("Dérive / volatilité",
+                            ["Estimées sur l'historique", "Manuelles"], key="mc_mode")
+
+    drift = vol = None
+    if mode == "Manuelles":
+        p1, p2 = st.columns(2)
+        with p1:
+            vol = st.number_input("Volatilité annualisée (%)", value=25.0, min_value=1.0,
+                                  max_value=200.0, step=1.0, key="mc_vol") / 100.0
+        with p2:
+            drift = st.number_input("Dérive annualisée (%)", value=5.0, min_value=-50.0,
+                                    max_value=100.0, step=1.0, key="mc_drift") / 100.0
+
+    mc = forecast.price_monte_carlo(prices, horizon_days=horizon, n_sims=n_sims,
+                                    seed=int(seed), drift=drift, volatility=vol)
+    if not mc.get("available"):
+        ui.note(mc.get("reason") or "Simulation impossible.", "warn", "📉")
+        return
+
+    ui.kpi_row(
+        [
+            {"label": "Cours initial", "value": fmt_num(mc["start"], 2) + " MAD",
+             "sub": "dernière clôture", "tone": "flat"},
+            {"label": "Médiane à l'horizon", "value": fmt_num(mc["median_final"], 2) + " MAD",
+             "sub": f"{fmt_pct(mc['expected_return'], 1)} vs départ",
+             "tone": "up" if (mc["expected_return"] or 0) >= 0 else "down"},
+            {"label": "Intervalle P5–P95",
+             "value": f"{fmt_num(mc['p5_final'], 1)} – {fmt_num(mc['p95_final'], 1)}",
+             "sub": "90 % des trajectoires", "tone": "blue"},
+            {"label": "Probabilité de finir au-dessus",
+             "value": fmt_pct(mc["prob_above"], 0), "sub": "cours final > départ",
+             "tone": "up" if mc["prob_above"] >= 0.5 else "warn"},
+        ],
+        per_row=4,
+    )
+
+    ui.plot(charts.monte_carlo_paths(mc, symbol=symbol, height=420), key="mc_paths")
+    ui.plot(charts.final_distribution(mc, title=f"{symbol} — distribution des prix finaux", height=320),
+            key="mc_dist")
+
+    start, end = mc.get("period_start"), mc.get("period_end")
+    period = ""
+    if start is not None and end is not None:
+        period = (f" · historique {str(start)[:10]} → {str(end)[:10]} "
+                  f"({mc['observations']} séances)")
+    st.caption(
+        f"Modèle : {mc['model']} · dérive annualisée {fmt_pct(mc['drift_annual'], 1)} "
+        f"({mc['drift_source']}) · volatilité annualisée {fmt_pct(mc['volatility_annual'], 1)} "
+        f"({mc['volatility_source']}) · {mc['n_sims']} trajectoires · graine {mc['seed']}{period}."
+    )
+    ui.note(
+        "La dérive et la volatilité sont **calculées** sur l'historique réel (ou saisies par vos soins). "
+        "Un modèle GBM suppose des rendements indépendants et une volatilité constante : il ignore les "
+        "sauts, les ruptures et la liquidité. Les probabilités affichées sont celles **du modèle**, pas "
+        "des probabilités garanties du marché.",
+        "info", "🎲",
+    )
+
+
 def _monte_carlo(result: Dict[str, Any], assumptions: Dict[str, Any], row: pd.Series) -> None:
     ui.section("Simulation Monte-Carlo", "Distribution de la valeur intrinsèque sous incertitude.")
     mc = forecast.monte_carlo_valuation(
@@ -762,13 +854,29 @@ def _monte_carlo(result: Dict[str, Any], assumptions: Dict[str, Any], row: pd.Se
         [
             {"label": "Médiane", "value": fmt_num(mc.get("median"), 2) + " MAD",
              "sub": "valeur centrale", "tone": "accent"},
-            {"label": "Intervalle 10–90 %", "value": f"{fmt_num(mc.get('p10'), 1)} – {fmt_num(mc.get('p90'), 1)}",
-             "sub": "fourchette de confiance", "tone": "blue"},
+            {"label": "Intervalle P5–P95",
+             "value": f"{fmt_num(mc.get('p5'), 1)} – {fmt_num(mc.get('p95'), 1)}",
+             "sub": "90 % des tirages", "tone": "blue"},
+            {"label": "P25 – P75",
+             "value": f"{fmt_num(mc.get('p25'), 1)} – {fmt_num(mc.get('p75'), 1)}",
+             "sub": "50 % des tirages", "tone": "blue"},
             {"label": "Probabilité de sous-évaluation",
              "value": fmt_pct(mc.get("prob_undervalued"), 0),
              "sub": "valeur > cours", "tone": "up" if (mc.get("prob_undervalued") or 0) > 0.5 else "warn"},
         ],
-        per_row=3,
+        per_row=4,
+    )
+    specs = mc.get("assumptions") or {}
+    st.caption(
+        f"Modèle : {specs.get('model', 'DCF')} · croissance {fmt_pct(specs.get('growth_mean'), 1)} "
+        f"(σ {fmt_pct(specs.get('growth_sigma'), 1)}) · actualisation {fmt_pct(specs.get('discount_rate'), 1)} "
+        f"· croissance terminale {fmt_pct(specs.get('terminal_growth'), 1)} · "
+        f"{specs.get('n_sims', '?')} tirages (graine {specs.get('seed', '?')})."
+    )
+    ui.note(
+        "Ces percentiles décrivent la distribution **du modèle**, à partir des hypothèses ci-dessus — "
+        "ce ne sont ni des certitudes ni des probabilités garanties du marché.",
+        "info", "🎲",
     )
 
     raw_values = mc.get("values")
@@ -796,11 +904,16 @@ def _monte_carlo(result: Dict[str, Any], assumptions: Dict[str, Any], row: pd.Se
 def _relative(row: pd.Series, symbol: str) -> None:
     ui.section("Valorisation relative", "Ratios de la société comparés à la médiane de son secteur.")
     f = fundamentals.get_fundamentals(symbol, row)
-    ratios = fundamentals.compute_ratios(f, price=row.get("close"), cap=row.get("cap"))
+    price = row.get("close")
+    cap = row.get("cap")
+    ratios = fundamentals.compute_ratios(f, price=price, cap=cap)
     sector = str(row.get("sector") or "")
+    table = shared.market_table()
     keys = [
         ("per", "P/E", "x"),
         ("pb", "P/B", "x"),
+        ("ps", "P/S", "x"),
+        ("ev_ebitda", "EV/EBITDA", "x"),
         ("roe", "ROE", "%"),
         ("net_margin", "Marge nette", "%"),
         ("dividend_yield", "Rendement du dividende", "%"),
@@ -808,20 +921,54 @@ def _relative(row: pd.Series, symbol: str) -> None:
     rows = []
     for key, label, unit in keys:
         value = ratios.get(key)
-        median = fundamentals.sector_median_ratios(sector, shared.market_table(), key)
+        median = fundamentals.sector_median_ratios(sector, table, key)
+        gap = (value - median) if (value is not None and median not in (None, 0)) else None
         rows.append(
             {
                 "Ratio": label,
                 "Société": _fmt_value(value, unit),
                 "Médiane du secteur": _fmt_value(median, unit),
-                "Écart": _fmt_value((value - median) if (value is not None and median not in (None, 0)) else None, unit),
+                "Écart": _fmt_value(gap, unit),
+                "Statut": "disponible" if value is not None else "non disponible",
             }
         )
-    ui.table(pd.DataFrame(rows), height=240, key="val_relative")
+    ui.table(pd.DataFrame(rows), height=300, key="val_relative")
+
+    period = f.get("fiscal_year") or f.get("period") or f.get("dps_year")
     st.caption(
-        "La médiane sectorielle est calculée uniquement sur les sociétés dont le ratio est "
-        "calculable — donc sur les données réellement renseignées."
+        f"Secteur : **{sector or 'non renseigné'}** · exercice : {period or 'non renseigné'} · "
+        f"source : {f.get('_source', 'non renseigné')}. La médiane sectorielle n'est calculée que sur "
+        "les sociétés dont le ratio est réellement calculable ; un ratio absent reste « non disponible »."
     )
+
+    peers = table[table["sector"] == sector] if not table.empty else pd.DataFrame()
+    if len(peers) > 1:
+        with st.expander(f"Comparables — secteur {sector} ({len(peers)} valeurs)", expanded=False):
+            compat = []
+            for _, prow in peers.iterrows():
+                pf = fundamentals.get_fundamentals(str(prow["symbol"]), prow)
+                pr = fundamentals.compute_ratios(pf, price=as_float(prow.get("close")),
+                                                 cap=as_float(prow.get("cap")))
+                compat.append(
+                    {
+                        "Symbole": prow["symbol"],
+                        "P/E": _fmt_value(pr.get("per"), "x"),
+                        "P/B": _fmt_value(pr.get("pb"), "x"),
+                        "EV/EBITDA": _fmt_value(pr.get("ev_ebitda"), "x"),
+                        "ROE": _fmt_value(pr.get("roe"), "%"),
+                        "Rendement": _fmt_value(pr.get("dividend_yield"), "%"),
+                    }
+                )
+            ui.table(pd.DataFrame(compat), height=min(380, 42 * (len(compat) + 1)), key="val_peers")
+            st.caption(
+                "Comparaison **au sein d'un même secteur** : banques et assurances ont un bilan et des "
+                "multiples différents des entreprises industrielles, elles ne sont donc pas mélangées. "
+                "Chaque ratio dépend de l'exercice renseigné pour chaque société."
+            )
+    else:
+        ui.note("Aucun comparable pertinent dans le même secteur : la comparaison sectorielle est "
+                "impossible pour l'instant.", "info", "⚖️")
+
 
 
 def _fmt_value(value: Optional[float], unit: str) -> str:

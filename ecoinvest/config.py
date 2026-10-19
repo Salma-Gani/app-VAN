@@ -9,7 +9,7 @@ APP_NAME = "MARKET MIND"
 APP_TAGLINE = "Investment intelligence platform"
 APP_SUBTITLE = "Votre capital. Votre stratégie. Une vision plus claire."
 APP_ICON = "🧭"
-VERSION = "3.3.0"
+VERSION = "3.4.0"
 
 # ═══════════════════════════ Chemins ═══════════════════════════
 ROOT = Path(__file__).resolve().parent.parent

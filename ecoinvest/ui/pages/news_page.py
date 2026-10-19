@@ -37,12 +37,21 @@ def render() -> None:
         )
         return
 
+    df = _with_holdings(df)
     _summary(df)
     st.divider()
     filtered = _filters(df)
     st.divider()
     _feed(filtered)
     ui.disclaimer()
+
+
+def _with_holdings(df: pd.DataFrame) -> pd.DataFrame:
+    try:
+        holdings = shared.get_profile().holdings or []
+    except Exception:
+        holdings = []
+    return news.holdings_relevance(df, holdings)
 
 
 # ═══════════════════════════ Synthèse ═══════════════════════════
@@ -54,6 +63,9 @@ def _summary(df: pd.DataFrame) -> None:
     sources = df["source"].nunique() if "source" in df.columns else 0
 
     tone = "up" if agg["score"] > 0.12 else "down" if agg["score"] < -0.12 else "warn"
+    impact_high = int((df["impact_level"] == "Élevé").sum()) if "impact_level" in df.columns else 0
+    held = df["held"].astype(str) if "held" in df.columns else pd.Series([""] * len(df))
+    held_count = int((held.str.len() > 0).sum())
     ui.kpi_row(
         [
             {"label": "Sentiment 7 jours", "value": str(agg["label"]),
@@ -62,14 +74,14 @@ def _summary(df: pd.DataFrame) -> None:
              "sub": "tonalité favorable", "tone": "up"},
             {"label": "Articles négatifs", "value": str(agg["negative"]),
              "sub": "tonalité défavorable", "tone": "down"},
+            {"label": "Impact potentiel élevé", "value": str(impact_high),
+             "sub": "matérialité estimée (heuristique)", "tone": "warn"},
+            {"label": "Liés au portefeuille", "value": str(held_count),
+             "sub": "mentionnent une position détenue", "tone": "accent"},
             {"label": "Sources actives", "value": str(sources),
              "sub": f"{len(df)} articles au total", "tone": "blue"},
-            {"label": "Secteur le plus porteur",
-             "value": str(by_sector.iloc[0]["secteur"]) if not by_sector.empty else "—",
-             "sub": (f"score {fmt_num(by_sector.iloc[0]['score'], 2)}" if not by_sector.empty else ""),
-             "tone": "accent"},
         ],
-        per_row=5,
+        per_row=3,
     )
 
     left, right = st.columns([1.3, 1], gap="medium")
@@ -97,14 +109,20 @@ def _summary(df: pd.DataFrame) -> None:
         display = counts.rename_axis("Source").reset_index(name="Articles")
         ui.table(display, height=380, key="news_sources")
 
-        with st.expander("ℹ️ Méthodologie du sentiment", expanded=False):
+        with st.expander("ℹ️ Méthodologie du sentiment et de l'impact", expanded=False):
             st.markdown(
-                "Le score est calculé par un lexique de mots financiers positifs et négatifs "
-                "(hausse, bénéfice, dividende, croissance… / baisse, perte, sanction, crise…).\n\n"
+                "**Sentiment (ton de l'article).** Score calculé par un lexique de mots financiers "
+                "positifs et négatifs (hausse, bénéfice, dividende… / baisse, perte, sanction…). "
                 "Il est **atténué** lorsque peu de mots-clés sont détectés, afin d'éviter les scores "
                 "extrêmes sur des titres courts. Le sentiment agrégé pondère chaque article par sa "
                 "fraîcheur (1 / (1 + jours)).\n\n"
-                "Cette mesure est indicative : elle ne remplace pas une lecture humaine de l'article."
+                "**Impact potentiel (matérialité estimée).** Dimension **distincte** du sentiment : "
+                "un article peut être très négatif sans conséquence financière, ou neutre en ton tout "
+                "en annonçant un événement majeur (augmentation de capital, taux directeur…). Le niveau "
+                "(Faible/Moyen/Élevé) et sa **raison** (mots-clés déclencheurs) sont affichés pour être "
+                "vérifiables.\n\n"
+                "Les deux mesures sont **indicatives et heuristiques** (mots-clés) : elles ne remplacent "
+                "pas une lecture humaine et ne constituent ni une prévision ni un conseil."
             )
 
 
@@ -126,6 +144,17 @@ def _filters(df: pd.DataFrame) -> pd.DataFrame:
     with c4:
         days = st.slider("Fenêtre (jours)", 1, 14, 7)
 
+    d1, d2 = st.columns([2, 3])
+    cats = sorted([str(c) for c in df["category"].dropna().unique()]) if "category" in df.columns else []
+    with d1:
+        chosen_cats = st.multiselect("Catégorie", cats, default=[], placeholder="Toutes",
+                                     key="news_cats")
+    with d2:
+        chosen_levels = st.multiselect(
+            "Impact potentiel", ["Élevé", "Moyen", "Faible"], default=[], placeholder="Tous",
+            key="news_levels",
+        )
+
     out = df.copy()
     if "published" in out.columns and out["published"].notna().any():
         cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days)
@@ -134,6 +163,10 @@ def _filters(df: pd.DataFrame) -> pd.DataFrame:
         out = out[out["source"].isin(chosen_sources)]
     if tones:
         out = out[out["sentiment_label"].isin(tones)]
+    if chosen_cats and "category" in out.columns:
+        out = out[out["category"].isin(chosen_cats)]
+    if chosen_levels and "impact_level" in out.columns:
+        out = out[out["impact_level"].isin(chosen_levels)]
     if search:
         needle = search.strip().lower()
         out = out[
@@ -174,6 +207,11 @@ def _card(item: pd.Series) -> None:
     scope = html_mod.escape(str(item.get("scope") or ""))
     summary = html_mod.escape(str(item.get("summary") or ""))
     summary = summary[:300] + ("…" if len(summary) > 300 else "")
+    category = html_mod.escape(str(item.get("category") or ""))
+    impact = html_mod.escape(str(item.get("impact_level") or ""))
+    reason = html_mod.escape(str(item.get("impact_reason") or ""))
+    held = html_mod.escape(str(item.get("held") or ""))
+    impact_tone = {"Élevé": "down", "Moyen": "warn"}.get(str(item.get("impact_level") or ""), "flat")
 
     st.markdown(
         f"""
@@ -187,6 +225,11 @@ def _card(item: pd.Series) -> None:
           </div>
           <div class="ei-muted" style="font-size:.75rem;margin:.3rem 0">
             {source}{(' · ' + scope) if scope else ''} · {date} · score {score:+.2f}
+          </div>
+          <div class="ei-muted" style="font-size:.75rem;margin:.15rem 0">
+            {category}{(' · impact : ' + impact) if impact else ''}{(' — ' + reason) if reason else ''}
+            <span class="ei-badge ei-{impact_tone}" style="margin-left:.4rem">impact {impact or '—'}</span>
+            {(' · <strong>Portefeuille : ' + held + '</strong>') if held else ''}
           </div>
           <div class="ei-muted" style="font-size:.83rem;line-height:1.5">{summary}</div>
         </div>

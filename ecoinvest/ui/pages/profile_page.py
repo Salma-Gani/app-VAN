@@ -5,6 +5,7 @@ from datetime import date
 from typing import Any, Dict, List
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from ...config import COLORS
@@ -371,6 +372,55 @@ def _holdings(profile: profile_mod.InvestorProfile) -> None:
         "Ouvrez la page « Portefeuille & arbitrage » pour comparer cette allocation à la cible "
         "recommandée et obtenir le plan de rééquilibrage chiffré.",
         "info", "🧭",
+    )
+    _sector_vs_market(enriched)
+
+
+def _sector_vs_market(enriched: pd.DataFrame) -> None:
+    """Compare le poids des secteurs détenus à leur poids dans la capitalisation de la Bourse."""
+    table = shared.market_table()
+    if table.empty or enriched.empty or not {"sector", "cap"}.issubset(table.columns):
+        return
+    ui.section(
+        "Allocation sectorielle : portefeuille vs marché",
+        "Poids de chaque secteur dans le portefeuille, face à son poids dans la capitalisation BVC.",
+    )
+    pf = enriched.groupby("sector")["value"].sum()
+    pf_w = pf / pf.sum() if pf.sum() else pf
+    mkt = table.groupby("sector")["cap"].sum()
+    mkt_w = mkt / mkt.sum() if mkt.sum() else mkt
+
+    sectors = sorted(set(pf_w.index) | set(mkt_w.index))
+    frame = pd.DataFrame(
+        [
+            {
+                "Secteur": s,
+                "Portefeuille %": float(pf_w.get(s, 0.0)) * 100,
+                "Marché %": float(mkt_w.get(s, 0.0)) * 100,
+                "Écart (pts)": (float(pf_w.get(s, 0.0)) - float(mkt_w.get(s, 0.0))) * 100,
+            }
+            for s in sectors
+        ]
+    ).sort_values("Portefeuille %", ascending=False)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=frame["Secteur"], y=frame["Portefeuille %"], name="Portefeuille",
+                         marker_color=COLORS["primary"]))
+    fig.add_trace(go.Bar(x=frame["Secteur"], y=frame["Marché %"], name="Marché (cap. BVC)",
+                         marker_color=COLORS["muted"]))
+    fig.update_layout(barmode="group", height=380, yaxis_title="Poids (%)", showlegend=True,
+                      margin=dict(l=10, r=10, t=10, b=10))
+    ui.plot(fig, key="profile_sector_vs_market")
+
+    display = frame.copy()
+    for col in ("Portefeuille %", "Marché %", "Écart (pts)"):
+        display[col] = display[col].round(1)
+    ui.table(display, height=min(360, 42 * (len(display) + 1)), key="profile_sector_table")
+    ui.note(
+        "Le poids « marché » reflète la part du secteur dans la capitalisation boursière totale — "
+        "ce n'est **pas** une performance. Une surpondération signifie une exposition plus forte que "
+        "le marché, pas un rendement supérieur attendu.",
+        "info", "⚖️",
     )
 
 
