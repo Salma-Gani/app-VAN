@@ -413,7 +413,7 @@ def setup_page(title: str, icon: str = "🧭") -> None:
         page_title=title,
         page_icon=icon,
         layout="wide",
-        initial_sidebar_state="collapsed",
+        initial_sidebar_state="expanded",
     )
     register_plotly_template()
     inject_css()

@@ -62,8 +62,11 @@ expurgées avant enregistrement du diagnostic.
   non-répétition des 401, réessai des 429/5xx, expurgation des secrets.
 - `tests/test_market_map.py` — structure du treemap, somme secteur = somme membres, gris pour
   donnée manquante, classes de couleur des 5 niveaux de sentiment, horodatage UTC.
-- Suite complète : `python3 -m unittest discover -s tests -q` (117 tests).
+- Suite complète : `python3 -m unittest discover -s tests -q` (134 tests).
 - 17 pages rendues sans exception via `streamlit.testing.v1.AppTest`.
+- `tests/test_statements_import_ratios.py` — import CSV/Excel valide et invalide, exercice
+  manquant, ligne sans montant, unités (MAD, milliers, millions, milliards), ratios calculés /
+  impossibles, secteur bancaire exclu de l'EV/EBITDA mais pas du PER, résolution AMMC IAM.
 
 ## 6. Limites restantes
 
@@ -72,3 +75,50 @@ expurgées avant enregistrement du diagnostic.
 - Les états financiers ne sont couverts que pour les sociétés dont les rapports sont vérifiés
   (TMA, MOX) ; l'ajout se fait société par société, avec import CSV validé.
 - La couverture EODHD/FMP des valeurs marocaines reste à confirmer avec une clé réelle.
+
+## 7. États financiers — diagnostic et correction
+
+### Cause exacte du bloc vide
+
+1. Le sélecteur de société s'ouvrait sur la **première valeur de l'univers** (MNG), qui n'a aucun
+   état enregistré : la page affichait donc un état vide alors que la fonctionnalité marchait
+   pour les sociétés couvertes. Corrigé : les sociétés couvertes sont proposées en premier et
+   signalées « états disponibles » dans la liste.
+2. Le **bilan importé** (CSV/Excel/API) restait vide : sans lignes détaillées, le repli ne
+   connaissait que le bloc `balance` et pas `balance_assets` / `balance_liabilities`. Corrigé par
+   une répartition actif/passif explicite (`ASSET_KEYS`, `LIABILITY_KEYS`).
+3. La **recherche AMMC** parcourait les pages sans utiliser le filtre émetteur officiel : au-delà
+   des premières pages, elle ne trouvait presque jamais la société. Corrigé : la liste des 187
+   émetteurs est lue, le nom est résolu (alias `IAM` → `MAROC TELECOM`, etc.) et la requête
+   utilise `field_emetteur_target_id_verf`.
+
+### Sources réellement vérifiées
+
+- Page « États financiers des émetteurs » de l'AMMC : **pas une API**, mais un filtre GET
+  fonctionnel. Test en direct : IAM (identifiant 2798) renvoie 5 documents avec PDF
+  (RFS S1 2026, RFA 2025, RFS S1 2025, RFA 2024, RFS S1 2024).
+- Les PDF sont accessibles et extractibles (`pypdf`), mais **l'extraction chiffrée n'est pas
+  fiable** : sur le rapport 2024 de Maroc Telecom, les colonnes de tableau se concatènent
+  (« Chiffre d'affaires 35 731 36 786 36 699 » → 35 731 367 863 669). Aucune donnée n'est donc
+  enregistrée automatiquement ; la page propose les lignes brutes, une détection d'unité et un
+  **brouillon CSV à vérifier**.
+
+### Fonctionnalités ajoutées
+
+- Onglets distincts : Bilan actif, Bilan passif, CPC, Trésorerie, Ratios, Historique,
+  Importer/API, Couverture.
+- Choix de l'exercice et du type de comptes (social / consolidé) quand les deux existent.
+- Ratios avec **formule, statut et raison** d'impossibilité ; EV/EBITDA écarté pour les banques
+  et assurances, PER et P/B conservés.
+- Import CSV **et Excel** (`.xlsx/.xlsm`) via le même validateur ; modèle CSV téléchargeable.
+- Conversion d'unités explicite à l'affichage et dans les ratios.
+- Navigation : barre latérale **ouverte** par défaut + bloc « Accès rapide » (tableau de bord,
+  états financiers, valorisation, portefeuille).
+
+### Limites restantes
+
+- Le jeu vérifié reste limité à TMA et MOX ; les autres sociétés doivent passer par l'import ou
+  par une API configurée (clé `.env`).
+- L'extraction PDF AMMC est une aide à la saisie, jamais une source automatique : la validation
+  humaine est obligatoire.
+- `openpyxl` est requis pour Excel (ajouté à `requirements.txt`, installé localement).

@@ -99,6 +99,13 @@ CANONICAL_KEYS: Dict[str, List[str]] = {
 # la valeur d'entreprise (EV/EBITDA) n'est pas une méthode pertinente pour eux.
 EV_METHOD_EXCLUDED_SECTORS = ("banque", "assurance", "finance", "holding financière")
 
+# Répartition actif / passif utilisée quand l'enregistrement ne fournit pas de
+# lignes détaillées (import CSV/Excel, API) : sans cela, l'onglet Bilan restait
+# vide alors que `record["balance"]` contenait bien les montants.
+ASSET_KEYS = ["non_current_assets", "current_assets", "inventory", "receivables",
+              "cash", "total_assets"]
+LIABILITY_KEYS = ["equity", "total_debt", "current_liabilities", "net_debt", "shares"]
+
 PERIOD_ORDER = {"FY": 0, "S1": 1, "S2": 2, "T1": 3, "T2": 4, "T3": 5, "T4": 6}
 
 
@@ -202,6 +209,11 @@ def get_statements(symbol: str) -> List[Dict[str, Any]]:
     return list(load_store().get(symbol.strip().upper(), []))
 
 
+def covered_symbols() -> List[str]:
+    """Symboles disposant d'au moins un état financier enregistré."""
+    return sorted(symbol for symbol, records in load_store().items() if records)
+
+
 def get_statement(symbol: str, fiscal_year: Optional[int] = None,
                   period: str = "FY") -> Optional[Dict[str, Any]]:
     records = get_statements(symbol)
@@ -243,11 +255,16 @@ def previous_statement(symbol: str, record: Optional[Dict[str, Any]] = None) -> 
 
 def _sanitize(record: Dict[str, Any]) -> Dict[str, Any]:
     """Ne conserve que les postes connus, convertis en nombres."""
+    raw_year = record.get("fiscal_year")
+    try:
+        fiscal_year = int(float(raw_year)) if str(raw_year).strip() else None
+    except (TypeError, ValueError):
+        fiscal_year = None
     out: Dict[str, Any] = {
         "symbol": str(record.get("symbol") or "").strip().upper(),
         "issuer": record.get("issuer"),
         "period": str(record.get("period") or "FY").upper(),
-        "fiscal_year": record.get("fiscal_year"),
+        "fiscal_year": fiscal_year,
         "period_end": record.get("period_end"),
         "currency": record.get("currency") or "MAD",
         "unit": record.get("unit") or "MAD",
@@ -423,6 +440,202 @@ def fundamentals_for(symbol: str) -> Dict[str, Any]:
     return to_fundamentals(record, previous_statement(symbol, record))
 
 
+def detect_unit(text: str) -> str:
+    """Devine l'unité annoncée dans un rapport (indicatif, à confirmer).
+
+    La détection ne sert qu'à pré-remplir un brouillon importable ; elle ne
+    modifie jamais un montant et n'est jamais appliquée automatiquement.
+    """
+    sample = _normalise((text or "")[:200000])
+    if "milliards de dirhams" in sample or "milliards mad" in sample:
+        return "milliards MAD"
+    if "millions de dirhams" in sample or "mdh" in sample.split() or "millions mad" in sample:
+        return "millions MAD"
+    if "milliers de dirhams" in sample or "kmad" in sample.split() or "milliers mad" in sample:
+        return "milliers MAD"
+    return "MAD"
+
+
+def unit_multiplier(unit: Optional[str]) -> float:
+    """Facteur de conversion d'une unité comptable vers l'unité de base (MAD).
+
+    ``MAD`` → 1 ; ``milliers`` → 1 000 ; ``millions`` / ``MDH`` → 1 000 000 ;
+    ``milliards`` → 1 000 000 000. Une unité inconnue est traitée comme 1 et
+    signalée par l'appelant, jamais devinée silencieusement.
+    """
+    text = _normalise(str(unit or ""))
+    if not text or text in {"mad", "dirham", "dirhams", "unite", "unites", "units", "unit"}:
+        return 1.0
+    if "milliard" in text or "billion" in text or text in {"bn", "mdh milliards"}:
+        return 1e9
+    if "million" in text or text in {"mdh", "mmad", "m mad"}:
+        return 1e6
+    if "millier" in text or "thousand" in text or text in {"kmad", "k mad"}:
+        return 1e3
+    return 1.0
+
+
+def ratios_for(record: Dict[str, Any], market: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+    """Ratios calculables à partir de l'état financier et, si fourni, du cours.
+
+    Chaque ligne expose sa **formule**, son statut et, en cas d'impossibilité,
+    la raison exacte (donnée manquante, dénominateur nul, méthode non pertinente).
+    Aucun ratio n'est calculé sur des données incompatibles ou inventées.
+    """
+    income = record.get("income") or {}
+    balance = record.get("balance") or {}
+    cashflow = record.get("cashflow") or {}
+    market = market or {}
+    factor = unit_multiplier(record.get("unit"))
+    sector = str(market.get("sector") or "").lower()
+
+    price = _num(market.get("close"))
+    cap = _num(market.get("cap"))
+    price_native = price / factor if price is not None else None
+    cap_native = cap / factor if cap is not None else None
+    shares = _num(balance.get("shares"))
+    net_income = _num(income.get("net_income"))
+    equity = _num(balance.get("equity"))
+    ebitda = _num(income.get("ebitda"))
+    net_debt = _num(balance.get("net_debt"))
+    if net_debt is None:
+        total_debt = _num(balance.get("total_debt"))
+        cash = _num(balance.get("cash"))
+        if total_debt is not None and cash is not None:
+            net_debt = total_debt - cash
+    eps = _num(income.get("eps"))
+    if eps is None and net_income is not None and shares:
+        eps = net_income / shares
+
+    rows: List[Dict[str, Any]] = []
+
+    def add(label: str, numerator: Optional[float], denominator: Optional[float],
+            formula: str, unit: str = "%", scale: float = 100.0,
+            numerator_name: str = "numérateur", denominator_name: str = "dénominateur",
+            note: str = "", status: Optional[str] = None) -> None:
+        if status:
+            rows.append({"Indicateur": label, "Valeur": None, "Unité": unit,
+                         "Formule": formula, "Statut": status, "Note": note})
+            return
+        missing = []
+        if numerator is None:
+            missing.append(numerator_name)
+        if denominator is None:
+            missing.append(denominator_name)
+        if missing:
+            rows.append({"Indicateur": label, "Valeur": None, "Unité": unit,
+                         "Formule": formula, "Statut": "Impossible",
+                         "Note": "donnée manquante : " + ", ".join(missing)})
+            return
+        if denominator == 0:
+            rows.append({"Indicateur": label, "Valeur": None, "Unité": unit,
+                         "Formule": formula, "Statut": "Impossible",
+                         "Note": "dénominateur nul"})
+            return
+        rows.append({"Indicateur": label, "Valeur": (numerator / denominator) * scale,
+                     "Unité": unit, "Formule": formula, "Statut": "Calculé",
+                     "Note": note})
+
+    add("Marge brute", _num(income.get("gross_profit")), _num(income.get("revenue")),
+        "marge brute / chiffre d'affaires", numerator_name="marge brute",
+        denominator_name="chiffre d'affaires")
+    add("Marge d'exploitation", _num(income.get("operating_income")), _num(income.get("revenue")),
+        "résultat d'exploitation / chiffre d'affaires", numerator_name="résultat d'exploitation",
+        denominator_name="chiffre d'affaires")
+    add("Marge nette", net_income, _num(income.get("revenue")),
+        "résultat net / chiffre d'affaires", numerator_name="résultat net",
+        denominator_name="chiffre d'affaires")
+
+    if equity is not None and equity <= 0:
+        add("ROE", None, None, "résultat net / capitaux propres", status="Impossible",
+            note="capitaux propres négatifs ou nuls : ratio non significatif")
+    else:
+        add("ROE", net_income, equity, "résultat net / capitaux propres",
+            numerator_name="résultat net", denominator_name="capitaux propres")
+    add("ROA", net_income, _num(balance.get("total_assets")),
+        "résultat net / total actif", numerator_name="résultat net",
+        denominator_name="total actif")
+    add("Levier financier", _num(balance.get("total_debt")), equity,
+        "dettes de financement / capitaux propres", unit="x", scale=1.0,
+        numerator_name="dettes de financement", denominator_name="capitaux propres")
+    add("Liquidité générale", _num(balance.get("current_assets")),
+        _num(balance.get("current_liabilities")),
+        "actif circulant / passif circulant", unit="x", scale=1.0,
+        numerator_name="actif circulant", denominator_name="passif circulant")
+    add("Couverture des intérêts", _num(income.get("operating_income")),
+        _num(income.get("interest_expense")),
+        "résultat d'exploitation / charges d'intérêts", unit="x", scale=1.0,
+        numerator_name="résultat d'exploitation", denominator_name="charges d'intérêts")
+    add("FCF / chiffre d'affaires", _num(cashflow.get("free_cash_flow")),
+        _num(income.get("revenue")), "free cash-flow / chiffre d'affaires",
+        numerator_name="free cash-flow", denominator_name="chiffre d'affaires")
+    add("Distribution (payout)", _num(cashflow.get("dividends_paid")), net_income,
+        "dividendes versés / résultat net", numerator_name="dividendes versés",
+        denominator_name="résultat net")
+
+    excluded = any(word in sector for word in EV_METHOD_EXCLUDED_SECTORS)
+    if excluded:
+        add("EV / EBITDA", None, None, "(capitalisation + dette nette) / EBITDA", unit="x",
+            status="Non pertinent",
+            note=f"secteur « {market.get('sector')} » : la valeur d'entreprise n'est pas une méthode adaptée")
+    elif ebitda is not None and ebitda <= 0:
+        add("EV / EBITDA", None, None, "(capitalisation + dette nette) / EBITDA", unit="x",
+            status="Impossible", note="EBITDA négatif ou nul")
+    elif cap_native is None or net_debt is None:
+        add("EV / EBITDA", None, None, "(capitalisation + dette nette) / EBITDA", unit="x",
+            status="Impossible",
+            note="donnée manquante : " + ", ".join(
+                x for x in (
+                    "capitalisation (BVC)" if cap_native is None else "",
+                    "dette nette" if net_debt is None else "",
+                ) if x))
+    else:
+        add("EV / EBITDA", cap_native + net_debt, ebitda,
+            "(capitalisation + dette nette) / EBITDA", unit="x", scale=1.0,
+            numerator_name="valeur d'entreprise", denominator_name="EBITDA")
+
+    # PER et P/B restent pertinents pour les banques et assurances : seul
+    # l'EV/EBITDA est écarté pour ces secteurs.
+    # PER = capitalisation / résultat net, strictement équivalent à cours / BPA
+    # lorsque le nombre de titres est cohérent. Cette forme est plus robuste aux
+    # unités d'import (milliers, millions) que le rapport cours / BPA.
+    if net_income is not None and net_income <= 0:
+        add("PER", None, None, "capitalisation / résultat net (≡ cours / BPA)", unit="x",
+            status="Impossible", note="résultat net négatif ou nul : PER non significatif")
+    elif cap_native is not None:
+        add("PER", cap_native, net_income, "capitalisation / résultat net (≡ cours / BPA)",
+            unit="x", scale=1.0, numerator_name="capitalisation",
+            denominator_name="résultat net")
+    elif price_native is not None and eps is not None:
+        add("PER", price_native, eps, "cours / BPA", unit="x", scale=1.0,
+            numerator_name="cours", denominator_name="BPA")
+    else:
+        add("PER", None, None, "capitalisation / résultat net (≡ cours / BPA)", unit="x",
+            status="Impossible",
+            note="donnée manquante : capitalisation et cours/BPA")
+
+    if equity is not None and equity <= 0:
+        add("P/B", None, None, "capitalisation / capitaux propres", unit="x",
+            status="Impossible", note="capitaux propres négatifs ou nuls")
+    elif cap_native is None:
+        add("P/B", None, None, "capitalisation / capitaux propres", unit="x",
+            status="Impossible", note="donnée manquante : capitalisation (BVC)")
+    else:
+        add("P/B", cap_native, equity, "capitalisation / capitaux propres", unit="x",
+            scale=1.0, numerator_name="capitalisation", denominator_name="capitaux propres")
+
+    dividends = _num(cashflow.get("dividends_paid"))
+    if dividends is not None and shares and price_native:
+        add("Rendement du dividende", dividends / shares, price_native,
+            "(dividendes versés / nombre de titres) / cours", note="estimation sur le dividende total")
+    else:
+        add("Rendement du dividende", None, None,
+            "(dividendes versés / nombre de titres) / cours", status="Impossible",
+            note="donnée manquante : dividende total, nombre de titres ou cours")
+
+    return pd.DataFrame(rows)
+
+
 def coverage(market_df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     """Couverture comptable par valeur : exercices disponibles, source, statut."""
     store = load_store()
@@ -468,8 +681,21 @@ def coverage(market_df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
 
 # ═══════════════════════════ Affichage ═══════════════════════════
 
+def _fallback_keys(block: str) -> List[str]:
+    if block == "balance_assets":
+        return ASSET_KEYS
+    if block == "balance_liabilities":
+        return LIABILITY_KEYS
+    return CANONICAL_KEYS.get(block, [])
+
+
 def block_table(record: Dict[str, Any], block: str) -> pd.DataFrame:
-    """Tableau prêt à afficher pour un bloc (``income``, ``balance``, ``cashflow``)."""
+    """Tableau prêt à afficher pour un bloc (``income``, ``balance``, ``cashflow``).
+
+    ``balance_assets`` et ``balance_liabilities`` acceptent soit des lignes
+    détaillées (``record["lines"]``), soit un repli sur le dictionnaire
+    ``record["balance"]`` : un import CSV/Excel n'a pas de lignes détaillées.
+    """
     if not record:
         return pd.DataFrame(columns=["Poste", "Exercice", "Exercice précédent"])
     lines = (record.get("lines") or {}).get(block)
@@ -483,12 +709,14 @@ def block_table(record: Dict[str, Any], block: str) -> pd.DataFrame:
             rows.append({"Poste": item.get("label") or "", "Exercice": value,
                          "Exercice précédent": prior})
     else:
-        payload = record.get(block) or {}
-        for key, label in LINE_DEFS.get(block, []):
+        payload = record.get("balance" if block.startswith("balance") else block) or {}
+        label_map = dict(LINE_DEFS.get("balance" if block.startswith("balance") else block, []))
+        for key in _fallback_keys(block):
             value = _num(payload.get(key))
             if value is None:
                 continue
-            rows.append({"Poste": label, "Exercice": value, "Exercice précédent": None})
+            rows.append({"Poste": label_map.get(key, key), "Exercice": value,
+                         "Exercice précédent": None})
     return pd.DataFrame(rows)
 
 
@@ -518,10 +746,23 @@ def import_csv(content: bytes) -> Dict[str, Any]:
     text = content.decode("utf-8-sig", errors="replace")
     dialect = ";" if text.count(";") > text.count(",") else ","
     reader = csv.DictReader(io.StringIO(text), delimiter=dialect)
+    fields = [str(name or "").strip() for name in (reader.fieldnames or [])]
+    if not fields or ("symbol" not in fields and "Symbole" not in fields):
+        raise StatementError(
+            "En-tête CSV invalide : la colonne « symbol » est obligatoire. "
+            "Téléchargez le modèle CSV pour voir le format attendu."
+        )
     records, errors = [], []
+    seen = 0
     for row in reader:
+        if not any(str(v or "").strip() for v in row.values()):
+            continue
+        seen += 1
         symbol = str(row.get("symbol") or row.get("Symbole") or "").strip().upper()
         if not symbol or symbol == "EXEMPLE":
+            continue
+        if not str(row.get("fiscal_year") or "").strip():
+            errors.append(f"{symbol}: exercice (fiscal_year) manquant")
             continue
         record: Dict[str, Any] = {
             "symbol": symbol,
@@ -545,12 +786,49 @@ def import_csv(content: bytes) -> Dict[str, Any]:
                 value = _num(raw)
                 if value is not None:
                     record[block][key] = value
+        if not any(record[block] for block in CANONICAL_KEYS):
+            errors.append(f"{symbol} {row.get('fiscal_year')}: aucun montant numérique reconnu")
+            continue
         try:
             records.append(_sanitize(record))
         except StatementError as exc:
             errors.append(f"{symbol}: {exc}")
+    if seen == 0:
+        raise StatementError("Le fichier ne contient aucune ligne de données.")
     result = save_many(records)
     return {"imported": result["saved"], "errors": errors + result["errors"]}
+
+
+def import_excel(content: bytes) -> Dict[str, Any]:
+    """Importe un classeur Excel (.xlsx/.xlsm) via pandas + openpyxl.
+
+    Le classeur doit contenir une feuille avec les mêmes colonnes que le modèle
+    CSV. Les valeurs sont converties en texte puis passées au même validateur,
+    afin qu'un import Excel et un import CSV aient exactement les mêmes règles.
+    """
+    import io
+
+    try:
+        frame = pd.read_excel(io.BytesIO(content), dtype=str)
+    except ImportError as exc:
+        raise StatementError(
+            "Lecture Excel indisponible : installez openpyxl (`pip install openpyxl`) "
+            "ou exportez le classeur au format CSV."
+        ) from exc
+    except Exception as exc:  # classeur corrompu, format inattendu
+        raise StatementError(f"Classeur Excel illisible : {exc}") from exc
+    if frame is None or frame.empty:
+        raise StatementError("Le classeur ne contient aucune ligne exploitable.")
+    frame = frame.fillna("")
+    return import_csv(frame.to_csv(index=False).encode("utf-8"))
+
+
+def import_table(content: bytes, filename: str = "") -> Dict[str, Any]:
+    """Point d'entrée unique d'import : CSV ou Excel selon l'extension."""
+    name = str(filename or "").lower()
+    if name.endswith((".xlsx", ".xlsm", ".xls")):
+        return import_excel(content)
+    return import_csv(content)
 
 
 # ═══════════════════════════ Fournisseurs externes ═══════════════════════════
@@ -876,6 +1154,159 @@ _ROW_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S | re.I)
 _DETAIL_RE = re.compile(r'href="(/fr/espace-emetteurs/etats-financiers/[^"#?]+)"', re.I)
 _PDF_RE = re.compile(r'href="(/sites/default/files/[^"#?]+\.pdf)"', re.I)
 
+# Correspondances entre tickers BVC et libellés AMMC, quand ils diffèrent.
+# Elles servent uniquement à retrouver le bon émetteur dans la liste officielle ;
+# aucun chiffre n'en est déduit.
+AMMC_ISSUER_ALIASES = {
+    "IAM": "MAROC TELECOM",
+    "ATW": "ATTIJARIWAFA BANK",
+    "BCP": "BANQUE CENTRALE POPULAIRE",
+    "BOA": "BANK OF AFRICA",
+    "TMA": "TOTALENERGIES MARKETING MAROC",
+    "MOX": "MAGHREB OXYGENE",
+    "LBV": "LABEL VIE",
+    "CSR": "COSUMAR",
+    "MNG": "MANAGEM",
+    "MSA": "MARSA MAROC",
+    "TGCC": "TGCC",
+}
+
+
+def _issuer_options(force: bool = False) -> List[Tuple[str, str]]:
+    """Liste officielle (identifiant, nom) des émetteurs AMMC.
+
+    La page publique expose un filtre « Émetteur » ; utiliser cet identifiant
+    évite de parcourir des centaines de pages sans jamais trouver la société.
+    """
+    key = "ammc:issuers"
+    if not force:
+        hit = cache.get(NS, key, TTL["ammc"])
+        if hit is not None:
+            return [tuple(item) for item in hit]
+    markup = _fetch_html(AMMC_LIST)
+    start = markup.find('name="field_emetteur_target_id_verf"')
+    end = markup.find("</select>", start)
+    segment = markup[start:end] if start >= 0 else markup
+    options = [
+        (value, html.unescape(name).strip())
+        for value, name in re.findall(r'<option value="(\d+)"[^>]*>([^<]*)</option>', segment, re.I)
+    ]
+    cache.set(NS, key, options)
+    return options
+
+
+def _resolve_issuer(issuer: str, symbol: Optional[str] = None) -> Optional[Tuple[str, str]]:
+    """Retrouve (identifiant, nom officiel) d'un émetteur dans la liste AMMC."""
+    options = _issuer_options()
+    candidates: List[str] = []
+    alias = AMMC_ISSUER_ALIASES.get(str(symbol or "").strip().upper())
+    if alias:
+        candidates.append(alias)
+    candidates.append(issuer)
+    for candidate in candidates:
+        query = _normalise(candidate)
+        if not query:
+            continue
+        for option_id, name in options:
+            if _normalise(name) == query:
+                return option_id, name
+        tokens = [token for token in query.split() if len(token) > 2]
+        if tokens:
+            matches = [
+                (option_id, name) for option_id, name in options
+                if all(token in _normalise(name) for token in tokens)
+            ]
+            if len(matches) == 1:
+                return matches[0]
+    return None
+
+
+def resolve_issuer(issuer: str, symbol: Optional[str] = None) -> Optional[Tuple[str, str]]:
+    """API publique : identifiant et libellé AMMC d'un émetteur, si trouvé."""
+    return _resolve_issuer(issuer, symbol)
+
+
+def ammc_documents(issuer: str, max_pages: int = 10, limit: int = 12,
+                   with_pdf: bool = True, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Liste les états financiers publiés par l'AMMC pour un émetteur.
+
+    La recherche utilise d'abord le **filtre émetteur officiel** de la page
+    AMMC (identifiant stable), puis, seulement en repli, un parcours de pages.
+    Lecture de la page de détail pour récupérer l'URL du PDF. Cache 24 h.
+    """
+    query = _normalise(issuer)
+    if not query:
+        return []
+    cache_key = f"ammc:{query}:{symbol or ''}:{max_pages}:{limit}:{int(with_pdf)}"
+    hit = cache.get(NS, cache_key, TTL["ammc"])
+    if hit is not None:
+        return hit
+
+    resolved = _resolve_issuer(issuer, symbol)
+    tokens = [tok for tok in query.split() if len(tok) > 2]
+
+    # (url, filtre_serveur_fiable)
+    sources: List[Tuple[str, bool]] = []
+    if resolved:
+        sources.append((f"{AMMC_LIST}?field_emetteur_target_id_verf={resolved[0]}", True))
+    for page in range(max_pages):
+        url = AMMC_LIST if page == 0 else f"{AMMC_LIST}?page={page}"
+        sources.append((url, False))
+
+    found: List[Dict[str, Any]] = []
+    seen_urls: set = set()
+    for url, trusted in sources:
+        try:
+            markup = _fetch_html(url)
+        except StatementError:
+            break
+        page_rows = _ROW_RE.findall(markup)
+        page_found = 0
+        for row in page_rows:
+            detail = _DETAIL_RE.search(row)
+            if not detail:
+                continue
+            text = _normalise(_strip_tags(row))
+            if tokens and not all(token in text for token in tokens):
+                # La page filtrée est fiable : le libellé AMMC peut différer du
+                # nom BVC (ex. IAM → MAROC TELECOM), on ne rejette donc pas.
+                if not trusted:
+                    continue
+            clean = _strip_tags(row)
+            link = f"{AMMC_BASE}{detail.group(1)}"
+            if link in seen_urls:
+                continue
+            seen_urls.add(link)
+            year = re.search(r"(20\d{2})", clean)
+            found.append({
+                "title": clean,
+                "year": year.group(1) if year else None,
+                "url": link,
+                "pdf_url": None,
+                "issuer_id": resolved[0] if resolved else None,
+                "issuer_name": resolved[1] if resolved else None,
+            })
+            page_found += 1
+            if len(found) >= limit:
+                break
+        # Si le filtre serveur a fonctionné, inutile de parcourir les pages.
+        if trusted and page_found:
+            break
+        if len(found) >= limit:
+            break
+
+    if with_pdf:
+        for item in found:
+            try:
+                detail_html = _fetch_html(item["url"])
+            except StatementError:
+                continue
+            pdfs = _PDF_RE.findall(detail_html)
+            if pdfs:
+                item["pdf_url"] = f"{AMMC_BASE}{pdfs[0]}"
+    cache.set(NS, cache_key, found)
+    return found
+
 
 def _strip_tags(fragment: str) -> str:
     text = html.unescape(_TAG_RE.sub(" ", fragment or ""))
@@ -898,67 +1329,6 @@ def _fetch_html(url: str) -> str:
         return response.text
     except requests.RequestException as exc:
         raise StatementError(f"AMMC injoignable ({url}) : {exc}") from exc
-
-
-def ammc_documents(issuer: str, max_pages: int = 10, limit: int = 12,
-                   with_pdf: bool = True) -> List[Dict[str, Any]]:
-    """Liste les états financiers publiés par l'AMMC pour un émetteur.
-
-    Lecture de la page publique « États financiers des émetteurs », puis des
-    pages de détail pour récupérer l'URL du PDF. Résultat mis en cache 24 h.
-    """
-    query = _normalise(issuer)
-    if not query:
-        return []
-    cache_key = f"ammc:{query}:{max_pages}:{limit}:{int(with_pdf)}"
-    hit = cache.get(NS, cache_key, TTL["ammc"])
-    if hit is not None:
-        return hit
-
-    tokens = [tok for tok in query.split() if len(tok) > 2]
-    found: List[Dict[str, Any]] = []
-    seen_urls: set = set()
-    for page in range(max_pages):
-        url = AMMC_LIST if page == 0 else f"{AMMC_LIST}?page={page}"
-        try:
-            markup = _fetch_html(url)
-        except StatementError:
-            break
-        for row in _ROW_RE.findall(markup):
-            detail = _DETAIL_RE.search(row)
-            if not detail:
-                continue
-            text = _normalise(_strip_tags(row))
-            if tokens and not all(token in text for token in tokens):
-                continue
-            clean = _strip_tags(row)
-            link = f"{AMMC_BASE}{detail.group(1)}"
-            if link in seen_urls:
-                continue
-            seen_urls.add(link)
-            year = re.search(r"(20\d{2})", clean)
-            found.append({
-                "title": clean,
-                "year": year.group(1) if year else None,
-                "url": link,
-                "pdf_url": None,
-            })
-            if len(found) >= limit:
-                break
-        if len(found) >= limit:
-            break
-
-    if with_pdf:
-        for item in found:
-            try:
-                detail_html = _fetch_html(item["url"])
-            except StatementError:
-                continue
-            pdfs = _PDF_RE.findall(detail_html)
-            if pdfs:
-                item["pdf_url"] = f"{AMMC_BASE}{pdfs[0]}"
-    cache.set(NS, cache_key, found)
-    return found
 
 
 # ═══════════════════════════ Extraction PDF (secours) ═══════════════════════════

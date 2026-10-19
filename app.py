@@ -15,6 +15,20 @@ def _sidebar() -> None:
     from ecoinvest.ui import components as ui
     from ecoinvest.ui.pages import shared
 
+    pages = st.session_state.get("_nav_pages") or {}
+    quick = (
+        ("dashboard", "📊 Tableau de bord marché"),
+        ("statements_page", "🧾 États financiers"),
+        ("valuation", "🧮 Valorisation & thèses"),
+        ("portfolio_builder", "💼 Portefeuille"),
+    )
+    if any(key in pages for key, _ in quick):
+        st.sidebar.markdown("#### ⚡ Accès rapide")
+        for key, label in quick:
+            page = pages.get(key)
+            if page is not None:
+                st.sidebar.page_link(page, label=label)
+
     st.sidebar.divider()
 
     st.sidebar.markdown("#### 🌍 Marché")
