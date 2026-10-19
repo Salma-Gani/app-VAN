@@ -59,9 +59,14 @@ def simulate_option(
     déduits de la valeur nette finale et affichés séparément.
     """
     gross_value = finance.future_value(amount, 0.0, expected_return, years)
-    nr = net_return(expected_return, years, tax=tax, dividend_share=dividend_share)
+    # ``net_return`` retire les frais d'entrée et de sortie ; ``fee_rate`` est un
+    # aller-retour, donc chaque jambe représente la moitié.
+    nr = net_return(
+        expected_return, years, tax=tax, dividend_share=dividend_share,
+        entry_fee=float(fee_rate or 0.0) / 2.0,
+    )
     fees = float(amount) * float(fee_rate or 0.0)
-    net_value = finance.future_value(amount, 0.0, nr, years) - fees
+    net_value = finance.future_value(amount, 0.0, nr, years)
     real_value = net_value / (1 + INFLATION_RATE) ** years
     # Intervalle de confiance approximatif (log-normal)
     sigma_t = volatility * np.sqrt(max(years, 0.1))

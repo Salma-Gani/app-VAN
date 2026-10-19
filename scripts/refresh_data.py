@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Préchauffage des données EcoInvest Pro.
+"""Préchauffage des données Market Mind.
 
 Ce script télécharge et met en cache toutes les sources réelles utilisées par
 l'application (BVC, Yahoo Finance, flux RSS) puis affiche un rapport de
@@ -48,14 +48,14 @@ def _step(name: str, func: Callable[[], Any], show: Optional[Callable[[Any], str
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Préchauffe les données d'EcoInvest Pro.")
+    parser = argparse.ArgumentParser(description="Préchauffe les données d'Market Mind.")
     parser.add_argument("--force", action="store_true", help="Ignore les caches existants.")
     parser.add_argument("--days", type=int, default=500, help="Profondeur d'historique (jours).")
     parser.add_argument("--skip-news", action="store_true", help="Ne pas interroger les flux RSS.")
     args = parser.parse_args()
 
     print("═" * 72)
-    print("  EcoInvest Pro — rafraîchissement des données réelles")
+    print("  Market Mind — rafraîchissement des données réelles")
     print("═" * 72)
 
     universe = _step(

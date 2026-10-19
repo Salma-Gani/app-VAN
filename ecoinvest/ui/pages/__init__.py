@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from . import (
     ai_page,
+    alerts_page,
     company,
     dashboard,
     fundamentals_page,
@@ -13,6 +14,7 @@ from . import (
     projects,
     screener,
     shared,
+    sources_page,
     simulator,
     valuation,
 )
@@ -28,6 +30,8 @@ __all__ = [
     "portfolio_builder",
     "news_page",
     "ai_page",
+    "alerts_page",
+    "sources_page",
     "fundamentals_page",
     "projects",
 ]

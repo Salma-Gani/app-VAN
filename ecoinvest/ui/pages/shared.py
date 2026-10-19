@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from ...ai import agent as agent_mod
-from ...analytics import scoring
+from ...analytics import scoring, technical
 from ...data import bvc, fundamentals, market, news
 from ...portfolio import optimize, profile as profile_mod, simulate
 
@@ -80,6 +80,18 @@ def stock_history(symbol: str, days: int = 400) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=1800, **CACHE_KW)
+def technical_summary(symbol: str) -> Dict[str, Any]:
+    """Résumé technique d'une valeur, calculé sur l'historique BVC en cache."""
+    hist = stock_history(symbol, days=400)
+    if hist is None or hist.empty:
+        return {}
+    try:
+        return technical.technical_summary(hist)
+    except Exception:
+        return {}
+
+
 def get_profile() -> profile_mod.InvestorProfile:
     """Profil de l'investisseur, persisté et synchronisé avec la session."""
     if "profile" not in st.session_state:
@@ -116,12 +128,16 @@ def recommendation(amount: float = 0.0, years: int = 0, profile_key: str = "") -
 
 
 def build_agent(provider: Optional[str] = None, share_amounts: bool = False):
+    holdings = enriched_holdings()
+    if holdings is None or holdings.empty:
+        holdings = None
+    rec = recommendation()
     return agent_mod.build_agent(
         market_df=market_table(),
         regime=market_regime(),
         profile=get_profile(),
-        enriched_holdings=enriched_holdings() or None,
-        recommendation=recommendation(),
+        enriched_holdings=holdings,
+        recommendation=rec,
         provider=provider,
         share_amounts=share_amounts,
     )

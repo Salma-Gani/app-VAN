@@ -26,7 +26,7 @@ RÈGLES ABSOLUES
    Chaque affirmation chiffrée doit être reliée à une donnée présente dans le contexte.
 """
 
-SYSTEM_MARKET_ANALYST = f"""Tu es « Atlas Analyst », analyste quantitatif senior spécialiste du marché
+SYSTEM_MARKET_ANALYST = f"""Tu es « Market Mind Analyst », analyste quantitatif senior spécialiste du marché
 actions marocain (Bourse de Casablanca) et des marchés internationaux.
 Tu produis des analyses d'investissement actionnables, chiffrées et hiérarchisées.
 {BASE_RULES}
@@ -41,7 +41,7 @@ FORMAT ATTENDU
 **⚠️ Risques**
 """
 
-SYSTEM_CHATBOT = f"""Tu es l'assistant conversationnel d'ATLAS FINANCE, une application d'analyse
+SYSTEM_CHATBOT = f"""Tu es l'assistant conversationnel de MARKET MIND, une application d'analyse
 et de simulation d'investissement sur la Bourse de Casablanca et les marchés mondiaux.
 Tu aides l'utilisateur à comprendre ses données, ses indicateurs et ses options.
 {BASE_RULES}
@@ -52,7 +52,24 @@ STYLE
 - Si la question porte sur un symbole, utilise les données de ce symbole présentes dans le contexte.
 """
 
-SYSTEM_BRIEFING = f"""Tu es le rédacteur du briefing de marché quotidien d'ATLAS FINANCE.
+SYSTEM_DIRECT_ANALYST = f"""Tu es « Market Mind Analyst », analyste financier senior spécialisé sur la
+Bourse de Casablanca et les marchés internationaux. Tu produis une analyse en direct
+d'un titre à partir des données réellement fournies par l'application.
+{BASE_RULES}
+FORMAT ATTENDU
+**Tendance & niveaux clés** — tendance, momentum, support, résistance, volume, avec chiffres.
+**Scénarios haussier / baissier** — deux scénarios conditionnels, chacun avec son déclencheur,
+son objectif observable et son invalidation. Ne présente jamais un scénario comme certain.
+**Conclusion & recommandation** — Prudence / Achat progressif / Rebond technique / Éviter,
+avec un niveau de confiance et la raison principale. Ce n'est pas un conseil personnalisé.
+**Ce qui soutient la conclusion** — 3 à 5 puces chiffrées.
+**Ce qui la contredit** — 2 à 4 puces (signaux opposés, valorisation, risque, actualité).
+**Données manquantes** — 1 à 3 puces ; écrire « donnée non disponible » si nécessaire.
+**Sources et dates** — citer les sources utilisées et leur date de référence.
+**⚠️ Risques** — une à deux lignes.
+"""
+
+SYSTEM_BRIEFING = f"""Tu es le rédacteur du briefing de marché quotidien de MARKET MIND.
 À partir des données fournies, rédige un briefing de 150 à 250 mots, structuré ainsi :
 1. **Le marché en une phrase** (tendance MASI + largeur + VIX).
 2. **Trois mouvements à retenir** (avec chiffres).
@@ -154,15 +171,17 @@ def company_context(symbol: str, row: Dict[str, Any], technical: Dict[str, Any],
         f"bêta {_fmt(row.get('beta'))} · drawdown max {_fmt(row.get('max_drawdown'), 'pct')} · "
         f"Sharpe {_fmt(row.get('sharpe'))}"
     )
-    if ratios:
+    usable_ratios = {
+        key: info for key, info in (ratios or {}).items()
+        if isinstance(info, dict) and info.get("value") is not None
+    }
+    if usable_ratios:
         lines.append("\n### RATIOS FONDAMENTAUX DISPONIBLES")
-        for key, info in ratios.items():
-            if not isinstance(info, dict):
-                continue
+        for key, info in usable_ratios.items():
             lines.append(f"- {info.get('label')} = {_fmt(info.get('value'))} → {info.get('grade')} : {info.get('text')}")
     else:
-        lines.append("\n### RATIOS FONDAMENTAUX\n- Aucune donnée fondamentale saisie pour cette valeur "
-                     "(utilisez l'onglet « Données fondamentales »). L'analyse est donc purement technique et de marché.")
+        lines.append("\n### RATIOS FONDAMENTAUX\n- Aucune donnée fondamentale exploitable pour cette valeur "
+                     "(utilisez l'onglet « Données fondamentales »). L'analyse est donc technique et de marché.")
     if fundamentals:
         extra = {k: v for k, v in fundamentals.items() if v not in (None, "", []) and k in
                  ("revenue", "net_income", "ebitda", "fcf", "equity", "total_debt", "cash", "dps", "eps")}
@@ -173,7 +192,10 @@ def company_context(symbol: str, row: Dict[str, Any], technical: Dict[str, Any],
     if news_items:
         lines.append("\n### ACTUALITÉS RÉCENTES")
         for item in news_items[:6]:
-            lines.append(f"- [{item.get('source')}] {item.get('title')} ({item.get('sentiment_label')})")
+            lines.append(
+                f"- [{item.get('source')}] {item.get('title')} "
+                f"({item.get('published') or 'date n.d.'}, {item.get('sentiment_label')})"
+            )
     return "\n".join(lines)
 
 
@@ -254,4 +276,54 @@ def portfolio_context(
                 if r["Poids"] > 0.02 and label_col in tgt.columns
             ]
             lines.append("- Allocation cible : " + ", ".join(parts))
+    return "\n".join(lines)
+
+
+# ═══════════════════════════ Contexte Valuation Lab et macro ═══════════════════════════
+
+
+def valuation_context(methods: Optional[List[Dict[str, Any]]]) -> str:
+    """Bloc des méthodes de valorisation disponibles, sans prix cible implicite."""
+    lines = ["### VALUATION LAB — MÉTHODES DISPONIBLES"]
+    if not methods:
+        return "\n".join(lines + ["- Aucune méthode évaluée."])
+    for method in methods:
+        label = method.get("label") or method.get("key")
+        if method.get("available"):
+            current = method.get("current_ratio")
+            if method.get("target_kind") == "yield":
+                current_txt = fmt_pct(current, 2) if current is not None else "n.d."
+            else:
+                current_txt = fmt_multiple(current) if current is not None else "n.d."
+            lines.append(
+                f"- {label} : disponible · ratio actuel {current_txt} · "
+                f"métrique {method.get('metric')} = {_fmt(method.get('metric_value'))} "
+                f"{method.get('metric_unit') or ''}"
+            )
+        else:
+            lines.append(f"- {label} : indisponible — {method.get('reason') or 'donnée manquante'}")
+    lines.append(
+        "Aucun prix cible n'est calculé sans hypothèse explicite de multiple, de rendement "
+        "ou de marge de sécurité. Le prix théorique n'est pas un objectif de cours."
+    )
+    return "\n".join(lines)
+
+
+def morocco_macro_context(data: Optional[Dict[str, Any]]) -> str:
+    """Bloc macro Maroc (World Bank), avec année et statut différé."""
+    lines = ["### MACRO MAROC (World Bank Open Data, annuel et différé)"]
+    if not data:
+        return "\n".join(lines + ["- Données macro indisponibles."])
+    for item in (data.get("indicators") or {}).values():
+        if item.get("value") is None:
+            lines.append(f"- {item.get('label')} : donnée non disponible")
+        else:
+            lines.append(
+                f"- {item.get('label')} : {fmt_num(item.get('value'), 2)} {item.get('unit', '')} "
+                f"({item.get('year') or 'année n.d.'})"
+            )
+    lines.append(
+        "- Source : World Bank Open Data. Séries annuelles différées, à ne pas confondre avec "
+        "les publications trimestrielles du HCP ou les décisions de Bank Al-Maghrib."
+    )
     return "\n".join(lines)

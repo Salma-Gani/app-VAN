@@ -14,17 +14,31 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from ..analytics import scoring, technical
-from ..data import bvc, fundamentals
+from ..analytics import scoring, technical, valuation_lab
+from ..data import bvc, fundamentals, macro as macro_mod
 from ..utils.formatting import fmt_money, fmt_multiple, fmt_num, fmt_pct
 from . import llm as llm_mod
 from . import prompts
 
 # ═══════════════════════════ Contexte applicatif ═══════════════════════════
+
+
+def _fmt_date(value: Any) -> str:
+    """Date lisible JJ/MM/AAAA, ou chaîne vide si indisponible."""
+    if value is None:
+        return ""
+    try:
+        ts = pd.Timestamp(value)
+        if pd.isna(ts):
+            return ""
+        return ts.strftime("%d/%m/%Y")
+    except (TypeError, ValueError):
+        return str(value)
 
 
 @dataclass
@@ -118,8 +132,34 @@ class MarketAgent:
                 news_items = df.head(6).to_dict("records")
         except Exception:
             pass
+        methods = valuation_lab.method_catalog(f, price=row.get("close"), cap=row.get("cap"))
+        try:
+            macro_data = macro_mod.morocco_indicators()
+        except Exception:
+            macro_data = {"indicators": {}, "available": False, "source": "World Bank Open Data"}
         block = prompts.company_context(symbol, row.to_dict(), summary, f, ratios, news_items)
-        return block, {"row": row.to_dict(), "technical": summary, "ratios": ratios, "fundamentals": f}
+        block += "\n\n" + prompts.valuation_context(methods)
+        block += "\n\n" + prompts.morocco_macro_context(macro_data)
+        payload = {
+            "symbol": symbol,
+            "row": row.to_dict(),
+            "technical": summary,
+            "ratios": ratios,
+            "fundamentals": f,
+            "news": news_items,
+            "macro": macro_data,
+            "valuation_methods": methods,
+            "sources": [
+                "Bourse de Casablanca (cours, volumes, historiques)",
+                "Référentiel BVC (nombre de titres, dividende)",
+                "Yahoo Finance (VIX, indices internationaux, devises)",
+                "Flux RSS publics (actualités)",
+                "World Bank Open Data (macro Maroc, séries annuelles différées)",
+            ],
+            "as_of": _fmt_date(row.get("last_date")),
+            "fundamentals_source": str(f.get("source") or ""),
+        }
+        return block, payload
 
     def _portfolio_block(self) -> str:
         return prompts.portfolio_context(
@@ -138,9 +178,11 @@ class MarketAgent:
             return {"mode": self.mode, "symbol": symbol, "text": f"Données indisponibles pour {symbol}.",
                     "provider": self.label}
 
+        generated_at = datetime.now().strftime("%d/%m/%Y %H:%M")
         if self.client is None:
             text = self._local_company_analysis(symbol, payload)
-            return {"mode": "local", "symbol": symbol, "text": text, "provider": self.label}
+            return {"mode": "local", "symbol": symbol, "text": text, "provider": self.label,
+                    "payload": payload, "generated_at": generated_at}
 
         system = prompts.SYSTEM_MARKET_ANALYST
         user = (
@@ -151,11 +193,55 @@ class MarketAgent:
         )
         try:
             text = self.client.chat([{"role": "user", "content": user}], system=system, temperature=0.25)
-            return {"mode": "llm", "symbol": symbol, "text": text, "provider": self.label}
+            return {"mode": "llm", "symbol": symbol, "text": text, "provider": self.label,
+                    "payload": payload, "generated_at": generated_at}
         except llm_mod.LLMError as exc:
             fallback = self._local_company_analysis(symbol, payload)
             return {"mode": "local", "symbol": symbol, "provider": self.label,
+                    "payload": payload, "generated_at": generated_at,
                     "text": f"> ⚠️ Erreur du fournisseur IA ({exc}). Réponse de l'analyste local :\n\n{fallback}"}
+
+    def analyse_titre(self, symbol: str) -> Dict[str, Any]:
+        """Analyse « en direct » : tendance, niveaux, scénarios et conclusion expliquée.
+
+        Le prompt reprend la structure demandée (tendance/niveaux, scénarios haussier
+        et baissier, conclusion) tout en conservant les garde-fous : sources, données
+        manquantes, facteurs contradictoires et absence de garantie.
+        """
+        symbol = symbol.strip().upper()
+        block, payload = self._company_block(symbol)
+        generated_at = datetime.now().strftime("%d/%m/%Y %H:%M")
+        if not payload:
+            return {"mode": self.mode, "symbol": symbol, "provider": self.label,
+                    "generated_at": generated_at, "payload": {},
+                    "text": f"Données indisponibles pour {symbol}."}
+
+        if self.client is None:
+            return {"mode": "local", "symbol": symbol,
+                    "text": self._local_direct_analysis(symbol, payload),
+                    "provider": self.label, "payload": payload, "generated_at": generated_at}
+
+        user = (
+            f"{self._market_block()}\n\n{block}\n\n"
+            f"{self._portfolio_block() if self.ctx.profile else ''}\n\n"
+            f"Rédige l'analyse en direct de {symbol}. Utilise exclusivement les données ci-dessus. "
+            "Les scénarios doivent être conditionnels et les niveaux doivent être des prix observables. "
+            "Termine par les sources, les données manquantes et les risques."
+        )
+        try:
+            text = self.client.chat(
+                [{"role": "user", "content": user}],
+                system=prompts.SYSTEM_DIRECT_ANALYST,
+                temperature=0.3,
+                max_tokens=1800,
+            )
+            return {"mode": "llm", "symbol": symbol, "text": text,
+                    "provider": self.label, "payload": payload, "generated_at": generated_at}
+        except llm_mod.LLMError as exc:
+            fallback = self._local_direct_analysis(symbol, payload)
+            return {"mode": "local", "symbol": symbol, "provider": self.label,
+                    "payload": payload, "generated_at": generated_at,
+                    "text": f"> ⚠️ Fournisseur IA indisponible ({exc}). Réponse de l'analyste local :\n\n{fallback}"}
 
     def briefing(self) -> Dict[str, Any]:
         """Briefing de marché."""
@@ -311,6 +397,185 @@ class MarketAgent:
                      "de la société avant toute décision.")
         return "\n".join(lines)
 
+    def _local_direct_analysis(self, symbol: str, payload: Dict[str, Any]) -> str:
+        row = payload.get("row") or {}
+        tech = payload.get("technical") or {}
+        ratios = payload.get("ratios") or {}
+        trend = tech.get("trend") or {}
+        momentum = tech.get("momentum") or {}
+        levels = tech.get("levels") or {}
+        macro = payload.get("macro") or {}
+        methods = payload.get("valuation_methods") or []
+        close = row.get("close")
+        score = None
+        if not self.ctx.market_df.empty and "composite_score" in self.ctx.market_df.columns:
+            found = self.ctx.market_df[self.ctx.market_df["symbol"] == symbol]
+            if not found.empty:
+                score = found.iloc[0].get("composite_score")
+        base_verdict = _verdict_from(score, tech.get("score"))
+        rsi = (momentum.get("rsi") if momentum.get("rsi") is not None else row.get("rsi14"))
+        if base_verdict in ("Achat fort", "Achat"):
+            direct_verdict = "Achat progressif"
+        elif base_verdict == "Conserver":
+            direct_verdict = "Prudence / conserver"
+        elif base_verdict == "Attendre":
+            direct_verdict = "Attendre un signal de confirmation"
+        else:
+            direct_verdict = "Éviter / attendre"
+        try:
+            rsi_value = float(rsi) if rsi is not None else None
+        except (TypeError, ValueError):
+            rsi_value = None
+        if rsi_value is not None and rsi_value <= 30 and "baissi" not in str(trend.get("state", "")).lower():
+            direct_verdict = "Rebond technique possible, à confirmer"
+        confidence = _confidence(payload)
+        positives, negatives, missing = _signal_factors(payload, score)
+
+        support = levels.get("support")
+        resistance = levels.get("resistance")
+        low52 = row.get("low_52w")
+        high52 = row.get("high_52w")
+        bull_target = resistance if resistance is not None else high52
+        bear_target = support if support is not None else low52
+
+        lines = [f"## {symbol} — {row.get('name') or symbol}", ""]
+        lines.append(
+            f"*Analyse générée le {datetime.now().strftime('%d/%m/%Y %H:%M')} · "
+            f"{self.label} · données de clôture {payload.get('as_of') or 'date non disponible'}*"
+        )
+        lines.append("")
+        lines.append("### Tendance & niveaux clés")
+        lines.append(
+            f"- Cours **{fmt_num(close)} MAD** · séance **{fmt_pct(row.get('change_pct'), 2, signed=True)}** · "
+            f"volume **{fmt_money(row.get('volume'), 'MAD', compact=True)}**."
+        )
+        lines.append(
+            f"- Tendance **{trend.get('state') or 'indéterminée'}**, momentum "
+            f"**{momentum.get('state') or 'indéterminé'}**, RSI(14) **{fmt_num(rsi, 1)}**."
+        )
+        lines.append(
+            f"- Support 120 j **{fmt_num(support)} MAD** · pivot **{fmt_num(levels.get('pivot'))} MAD** · "
+            f"résistance 120 j **{fmt_num(resistance)} MAD**."
+        )
+        lines.append(
+            f"- Plus bas / plus haut 52 semaines : **{fmt_num(low52)} / {fmt_num(high52)} MAD**."
+        )
+        for note in (trend.get("notes") or [])[:2]:
+            lines.append(f"- {note}")
+        for note in (momentum.get("notes") or [])[:2]:
+            lines.append(f"- {note}")
+
+        lines.append("")
+        lines.append("### Scénarios haussier / baissier")
+        if bull_target is not None:
+            lines.append(
+                f"- **Haussier** : si le cours franchit **{fmt_num(resistance or bull_target)} MAD** "
+                f"avec un volume supérieur à la moyenne, le premier objectif observable est "
+                f"**{fmt_num(high52 or bull_target)} MAD**. Scénario invalidé sous "
+                f"**{fmt_num(support or close)} MAD**."
+            )
+        else:
+            lines.append("- **Haussier** : objectif indisponible faute de résistance calculable.")
+        if support is not None and low52 is not None and abs(float(support) - float(low52)) / max(float(close or 1), 1) < 0.01:
+            lines.append(
+                f"- **Baissier** : si le cours casse **{fmt_num(support)} MAD**, il passera sous son "
+                f"plus bas 52 semaines (**{fmt_num(low52)} MAD**). Il n'existe alors plus de support "
+                f"historique proche dans la fenêtre observée ; le risque d'accélération baissière augmente. "
+                f"Scénario invalidé au-dessus de **{fmt_num(resistance or close)} MAD**."
+            )
+        elif bear_target is not None:
+            lines.append(
+                f"- **Baissier** : si le cours casse **{fmt_num(support or bear_target)} MAD**, "
+                f"la zone de vigilance devient **{fmt_num(low52 or bear_target)} MAD**. "
+                f"Scénario invalidé au-dessus de **{fmt_num(resistance or close)} MAD**."
+            )
+        else:
+            lines.append("- **Baissier** : support indisponible faute d'historique suffisant.")
+        lines.append(
+            "- Ces scénarios sont conditionnels et ne constituent pas des prévisions de prix. "
+            "Aucune probabilité n'est calculée sans modèle validé."
+        )
+
+        lines.append("")
+        lines.append("### Conclusion & recommandation")
+        lines.append(
+            f"**{direct_verdict}** — niveau de confiance **{confidence}**. "
+            f"Score composite {fmt_num(score, 0)}/100 · score technique {fmt_num(tech.get('score'), 2)} "
+            "sur [-1 ; 1]."
+        )
+        lines.append(
+            "Cette conclusion est une lecture analytique des données disponibles, pas un conseil "
+            "personnalisé ni une garantie de performance."
+        )
+
+        lines.append("")
+        lines.append("### Ce qui soutient la conclusion")
+        lines.extend(f"- {item}" for item in positives[:5]) if positives else lines.append(
+            "- Aucun facteur favorable net identifié."
+        )
+        lines.append("")
+        lines.append("### Ce qui la contredit")
+        lines.extend(f"- {item}" for item in negatives[:4]) if negatives else lines.append(
+            "- Aucun signal contradictoire majeur détecté, mais l'absence de données reste un risque."
+        )
+        lines.append("")
+        lines.append("### Données manquantes")
+        if missing:
+            lines.extend(f"- {item}" for item in missing[:3])
+        else:
+            lines.append("- Couverture satisfaisante sur les dimensions analysées ; d'autres risques "
+                         "peuvent rester non mesurés.")
+        lines.append("")
+        lines.append("### Valorisation et fondamentaux")
+        usable = [m for m in methods if m.get("available")]
+        if usable:
+            for method in usable[:6]:
+                current = method.get("current_ratio")
+                if method.get("target_kind") == "yield":
+                    rendered = fmt_pct(current, 2) if current is not None else "n.d."
+                else:
+                    rendered = fmt_multiple(current) if current is not None else "n.d."
+                lines.append(
+                    f"- **{method.get('label')}** : ratio actuel {rendered} · métrique "
+                    f"{method.get('metric')} = {fmt_num(method.get('metric_value'))}."
+                )
+            lines.append(
+                "- Aucun prix cible n'est calculé ici : ouvrez **Valorisation** pour saisir un multiple "
+                "cible et une marge de sécurité. Le prix théorique restera conditionnel à vos hypothèses."
+            )
+        else:
+            lines.append(
+                "- Aucune métrique fondamentale exploitable (BPA, EBITDA, fonds propres, ventes ou "
+                "dividende) n'est disponible. L'analyse est donc technique et de marché. "
+                "Renseignez les états financiers dans « Données fondamentales »."
+            )
+
+        lines.append("")
+        lines.append("### Macro et actualités")
+        macro_lines = [line for line in prompts.morocco_macro_context(macro).splitlines() if line.startswith("- ")]
+        lines.extend(macro_lines[:3])
+        news_items = payload.get("news") or []
+        if news_items:
+            lines.append("- Actualités utilisées :")
+            for item in news_items[:3]:
+                lines.append(
+                    f"  - [{item.get('source')}] {item.get('title')} "
+                    f"({_fmt_date(item.get('published')) or 'date n.d.'})"
+                )
+        else:
+            lines.append("- Aucune actualité récente exploitable n'a été chargée.")
+
+        lines.append("")
+        lines.append("### Sources et dates")
+        for source in payload.get("sources") or []:
+            lines.append(f"- {source}.")
+        lines.append(f"- Date de référence des cours : {payload.get('as_of') or 'non disponible'}.")
+        lines.append("")
+        lines.append("> **⚠️ Risques** : analyse automatisée sur données publiques. Risque de perte en "
+                     "capital, de liquidité sur les petites capitalisations et de concentration. "
+                     "Vérifiez les publications officielles de la société et de la Bourse de Casablanca.")
+        return "\n".join(lines)
+
     def _local_briefing(self) -> str:
         regime = self.ctx.regime or {}
         vix = regime.get("vix") or {}
@@ -407,19 +672,8 @@ class MarketAgent:
         return self._local_help()
 
     def _company_payload(self, symbol: str) -> Dict[str, Any]:
-        row = self.ctx.row_for(symbol)
-        if row is None:
-            return {}
-        hist = bvc.stock_history(symbol, days=400)
-        tech = technical.technical_summary(hist) if hist is not None and not hist.empty else {}
-        f = fundamentals.get_fundamentals(symbol, row)
-        ratios_raw = fundamentals.compute_ratios(f, price=row.get("close"), cap=row.get("cap"))
-        return {
-            "row": row.to_dict(),
-            "technical": tech,
-            "ratios": {k: fundamentals.interpret_ratio(k, v) for k, v in ratios_raw.items()},
-            "fundamentals": f,
-        }
+        _, payload = self._company_block(symbol)
+        return payload
 
     def _local_allocation_answer(self) -> str:
         rec = self.ctx.recommendation
@@ -547,7 +801,7 @@ class MarketAgent:
 
     def _local_help(self) -> str:
         regime = self.ctx.regime or {}
-        lines = ["## Atlas Market Intelligence — mode analyste local", ""]
+        lines = ["## Market Mind Intelligence — mode analyste local", ""]
         lines.append(
             f"Le moteur fonctionne actuellement **sans LLM** : les réponses sont produites par un moteur "
             f"de règles à partir des données réelles chargées. Régime de marché : **{regime.get('label', 'indisponible')}**."
@@ -602,8 +856,8 @@ def _signal_factors(payload: Dict[str, Any], score: Optional[float]) -> Tuple[Li
     if rsi is not None:
         try:
             rsi_f = float(rsi)
-            add(rsi_f >= 70, negatives, f"RSI à {rsi_f:.0f} : zone de surachat, risque de consolidation.")
-            add(rsi_f <= 30, positives, f"RSI à {rsi_f:.0f} : zone de survente, rebond possible mais à confirmer.")
+            add(rsi_f >= 70, negatives, f"RSI à {fmt_num(rsi_f, 0)} : zone de surachat, risque de consolidation.")
+            add(rsi_f <= 30, positives, f"RSI à {fmt_num(rsi_f, 0)} : zone de survente, rebond possible mais à confirmer.")
         except (TypeError, ValueError):
             pass
     if ret12 is not None:
@@ -630,8 +884,8 @@ def _signal_factors(payload: Dict[str, Any], score: Optional[float]) -> Tuple[Li
     if beta is not None:
         try:
             b = float(beta)
-            add(b > 1.2, negatives, f"Bêta **{b:.2f}** : amplification des mouvements du marché.")
-            add(b < 0.8, positives, f"Bêta défensif **{b:.2f}**.")
+            add(b > 1.2, negatives, f"Bêta **{fmt_num(b, 2)}** : amplification des mouvements du marché.")
+            add(b < 0.8, positives, f"Bêta défensif **{fmt_num(b, 2)}**.")
         except (TypeError, ValueError):
             pass
     if drawdown is not None:
@@ -643,12 +897,19 @@ def _signal_factors(payload: Dict[str, Any], score: Optional[float]) -> Tuple[Li
     if sharpe is not None:
         try:
             sh = float(sharpe)
-            add(sh > 0.8, positives, f"Ratio de Sharpe **{sh:.2f}** : rendement correctement rémunéré.")
-            add(sh < 0, negatives, f"Ratio de Sharpe négatif (**{sh:.2f}**) sur la période.")
+            add(sh > 0.8, positives, f"Ratio de Sharpe **{fmt_num(sh, 2)}** : rendement correctement rémunéré.")
+            add(sh < 0, negatives, f"Ratio de Sharpe négatif (**{fmt_num(sh, 2)}**) sur la période.")
         except (TypeError, ValueError):
             pass
 
     usable = {k: v for k, v in ratios.items() if isinstance(v, dict) and v.get("value") is not None}
+    core_keys = ("per", "pb", "roe", "net_margin", "ev_ebitda", "fcf_yield")
+    has_core = any((usable.get(k) or {}).get("value") is not None for k in core_keys)
+    if not has_core:
+        missing.append(
+            "États financiers complets non renseignés : P/E, ROE, marges et endettement ne sont "
+            "pas calculables. L'analyse fondamentale reste partielle."
+        )
     if usable:
         ys = (usable.get("dividend_yield") or {}).get("value")
         if ys is not None and float(ys) >= 0.04:
@@ -671,8 +932,8 @@ def _signal_factors(payload: Dict[str, Any], score: Optional[float]) -> Tuple[Li
                 negatives.append(f"Endettement élevé : dette/fonds propres **{float(dte):.2f}x**.")
             elif float(dte) < 0.8:
                 positives.append(f"Levier maîtrisé : dette/fonds propres **{float(dte):.2f}x**.")
-    else:
-        missing.append("Aucun état financier saisi : P/E, ROE, marges et endettement ne sont pas calculés.")
+    if not usable:
+        missing.append("Aucun ratio fondamental exploitable n'est disponible pour cette valeur.")
     if not tech:
         missing.append("Historique de cours insuffisant pour les indicateurs techniques.")
     if not row.get("volume"):
@@ -686,17 +947,20 @@ def _confidence(payload: Dict[str, Any]) -> str:
     tech = payload.get("technical") or {}
     ratios = payload.get("ratios") or {}
     usable = [v for v in ratios.values() if isinstance(v, dict) and v.get("value") is not None]
+    core_keys = ("per", "pb", "roe", "net_margin", "ev_ebitda", "fcf_yield")
+    has_core = any((ratios.get(k) or {}).get("value") is not None for k in core_keys)
+    tech_rsi = (tech.get("momentum") or {}).get("rsi") if tech else None
     checks = [
-        bool(usable),
+        has_core,
         bool(tech),
         row.get("return_12m") is not None,
-        row.get("rsi14") is not None,
+        tech_rsi is not None,
         row.get("max_drawdown") is not None,
     ]
     count = sum(1 for c in checks if c)
-    if count >= 4:
+    if has_core and count >= 4:
         return "élevé"
-    if count >= 2:
+    if count >= 3:
         return "moyen"
     return "faible"
 

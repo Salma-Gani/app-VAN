@@ -5,11 +5,11 @@ import os
 from pathlib import Path
 
 # ═══════════════════════════ Identité de l'application ═══════════════════════════
-APP_NAME = "ATLAS FINANCE"
+APP_NAME = "MARKET MIND"
 APP_TAGLINE = "Investment intelligence platform"
 APP_SUBTITLE = "Votre capital. Votre stratégie. Une vision plus claire."
 APP_ICON = "🧭"
-VERSION = "3.0.0"
+VERSION = "3.1.0"
 
 # ═══════════════════════════ Chemins ═══════════════════════════
 ROOT = Path(__file__).resolve().parent.parent
@@ -82,6 +82,7 @@ TTL = {
     "global": 600,         # 10 min — actions/yahoo
     "fundamentals": 86400,  # 24 h
     "news": 900,           # 15 min
+    "macro": 86400,        # 24 h — séries annuelles World Bank
 }
 
 # ═══════════════════════════ Palette (institutionnelle, fond clair) ═══════════════════════════
@@ -214,7 +215,7 @@ def sector_risk_level(sector: str, default: int = 3) -> int:
 ENABLE_LIVE_BVC = os.getenv("ECOINVEST_DISABLE_LIVE", "0") != "1"
 ENABLE_LIVE_YAHOO = os.getenv("ECOINVEST_DISABLE_YAHOO", "0") != "1"
 DISCLAIMER = (
-    "⚠️ **Avertissement** : ATLAS FINANCE est un outil d'aide à la décision à visée "
+    "⚠️ **Avertissement** : MARKET MIND est un outil d'aide à la décision à visée "
     "pédagogique et analytique. Il ne constitue ni un conseil en investissement, ni une "
     "recommandation d'achat ou de vente. Les performances passées ne préjugent pas des "
     "performances futures. Vérifiez toujours les données auprès de la Bourse de Casablanca "

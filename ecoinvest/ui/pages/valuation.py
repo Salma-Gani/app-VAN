@@ -1,6 +1,7 @@
 """Valorisation DCF, scénarios et simulation Monte-Carlo d'une valeur."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 import numpy as np
@@ -9,10 +10,12 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from ...analytics import forecast
+from ...analytics import valuation_lab as lab
 from ...config import COLORS, RISK_FREE_RATE
 from ...data import fundamentals
-from ...utils.formatting import fmt_money, fmt_num, fmt_pct
+from ...utils.formatting import as_float, fmt_money, fmt_num, fmt_pct
 from .. import charts, components as ui
+from ..reporting import download_analysis
 from . import shared
 
 
@@ -38,6 +41,9 @@ def render() -> None:
         as_of=f"clôture du {shared.last_market_date(table)}",
         detail="Le DCF repose sur des hypothèses explicites : croissance, marge, taux d'actualisation et valeur terminale.",
     )
+
+    _valuation_lab(row, f)
+    st.divider()
 
     fcf_start = forecast.base_fcf(f)
     if fcf_start is None or fcf_start <= 0:
@@ -89,6 +95,343 @@ def render() -> None:
     st.divider()
     _relative(row, symbol)
     ui.disclaimer()
+
+
+# ═══════════════════════════ Valuation Lab ═══════════════════════════
+
+
+def _valuation_lab(row: pd.Series, f: Dict[str, Any]) -> None:
+    """Prix théorique d'entrée par multiples, comparé au cours observable."""
+    price = as_float(row.get("close")) or as_float(f.get("price"))
+    cap = as_float(row.get("cap")) or as_float(f.get("market_cap"))
+    catalog = lab.method_catalog(f, price=price, cap=cap)
+    specs = {m["key"]: m for m in catalog}
+
+    ui.section(
+        "Valuation Lab — prix théorique d'entrée",
+        "Choisissez une méthode, un multiple cible et une marge de sécurité. Le résultat est une "
+        "valeur conditionnelle à vos hypothèses, jamais un objectif de cours ni une recommandation.",
+    )
+
+    if price is None:
+        ui.note("Le cours actuel n'est pas disponible : impossible de comparer le prix théorique au marché.",
+                "warn", "⚠️")
+        return
+
+    available = [m for m in catalog if m["available"]]
+    if not available:
+        ui.note(
+            "**Aucun multiple calculable pour cette société.** Les états financiers (BPA, EBITDA, "
+            "capitaux propres, chiffre d'affaires) ne sont pas renseignés. Le dividende BVC permet "
+            "parfois une valorisation par rendement ; sinon, complétez les données fondamentales. "
+            "Aucune valeur n'est inventée.",
+            "warn", "🧾",
+        )
+    keys = [m["key"] for m in catalog]
+    labels = {
+        m["key"]: f"{m['label']} — {'disponible' if m['available'] else 'donnée manquante'}"
+        for m in catalog
+    }
+    default_index = next((i for i, m in enumerate(catalog) if m["available"]), 0)
+    method = st.selectbox(
+        "Méthode de valorisation",
+        keys,
+        index=default_index,
+        format_func=lambda k: labels.get(k, k),
+        key="lab_method",
+    )
+    spec = specs[method]
+    if method == "per":
+        st.caption("Formule : prix théorique = PER cible × BPA. Exemple pédagogique : 20 × 12 = 240 MAD "
+                   "(illustration mathématique, pas une valorisation réelle).")
+
+    metric_override = None
+    net_debt = float(as_float(f.get("total_debt")) or 0.0) - float(as_float(f.get("cash")) or 0.0)
+    shares = as_float(f.get("shares"))
+
+    if method in ("ev_ebitda", "ev_ebit"):
+        with st.expander("⚙️ Ajustements EV → capitaux propres", expanded=not spec["available"]):
+            c1, c2 = st.columns(2)
+            with c1:
+                net_debt = st.number_input(
+                    "Dette nette (MAD)", value=float(net_debt), step=10_000_000.0, format="%.0f",
+                    key=f"lab_net_debt_{method}",
+                    help="Dette financière brute moins trésorerie. Déduite de la valeur d'entreprise.",
+                )
+            with c2:
+                shares = st.number_input(
+                    "Nombre d'actions", min_value=0.0,
+                    value=float(shares or 0.0), step=1_000_000.0, format="%.0f",
+                    key=f"lab_shares_{method}",
+                    help="Nombre de titres utilisé pour passer de la valeur des capitaux propres au prix par action.",
+                )
+
+    if not spec["available"]:
+        with st.expander("✍️ Saisir une donnée de référence vérifiée", expanded=True):
+            st.caption(
+                "Cette valeur doit provenir d'un rapport annuel, d'un communiqué de résultats ou d'une "
+                "source documentaire identifiée. Elle est utilisée pour le calcul mais **n'est pas enregistrée** "
+                "dans la fiche fondamentale."
+            )
+            if method == "per":
+                metric_override = st.number_input(
+                    "BPA de référence (MAD/action)", min_value=0.0, value=0.0, step=0.1,
+                    key="lab_override_per",
+                ) or None
+            elif method == "ev_ebitda":
+                metric_override = st.number_input(
+                    "EBITDA de référence (MAD)", min_value=0.0, value=0.0, step=10_000_000.0,
+                    format="%.0f", key="lab_override_ebitda",
+                ) or None
+            elif method == "ev_ebit":
+                metric_override = st.number_input(
+                    "EBIT de référence (MAD)", min_value=0.0, value=0.0, step=10_000_000.0,
+                    format="%.0f", key="lab_override_ebit",
+                ) or None
+            elif method == "pb":
+                metric_override = st.number_input(
+                    "Valeur comptable par action (MAD/action)", min_value=0.0, value=0.0, step=0.1,
+                    key="lab_override_bvps",
+                ) or None
+            elif method == "ps":
+                metric_override = st.number_input(
+                    "Ventes par action (MAD/action)", min_value=0.0, value=0.0, step=0.1,
+                    key="lab_override_sales_ps",
+                ) or None
+            else:
+                metric_override = st.number_input(
+                    "Dividende par action (MAD/action)", min_value=0.0, value=0.0, step=0.1,
+                    key="lab_override_dps",
+                ) or None
+
+    current_target = spec.get("default_target") or 1.0
+    if spec.get("target_kind") == "yield":
+        input_target = st.number_input(
+            "Rendement exigé (%)", min_value=0.1, max_value=30.0,
+            value=float(round(current_target * 100, 2)), step=0.1,
+            key="lab_target_yield",
+            help="Plus le rendement exigé est élevé, plus le prix théorique d'entrée est bas.",
+        )
+        target = input_target / 100.0
+    else:
+        target = st.number_input(
+            spec["target_label"], min_value=0.1, max_value=100.0,
+            value=float(round(current_target, 2)), step=0.5,
+            key="lab_target_multiple",
+            help="Multiple appliqué à la métrique de référence. Il doit être justifié par l'historique, "
+                 "le secteur ou votre scénario.",
+        )
+    required_margin = st.slider(
+        "Marge de sécurité exigée (%)", min_value=0, max_value=50, value=20, step=5,
+        key="lab_margin",
+        help="Prix d'entrée = valeur théorique × (1 − marge). Une marge élevée réduit le prix payé.",
+    ) / 100.0
+
+    result = lab.target_entry(
+        method, target, f, price=price, net_debt=net_debt, shares=shares,
+        required_margin=required_margin, metric_override=metric_override,
+    )
+    if not result.get("available"):
+        ui.note(result.get("reason") or "Calcul impossible avec ces données.", "warn", "⚠️")
+        return
+
+    fair = result.get("fair_value")
+    entry = result.get("entry_price")
+    current = result.get("current_ratio")
+    zone = result.get("zone") or {}
+    ratio_is_yield = spec.get("target_kind") == "yield"
+
+    def ratio_text(value: Optional[float]) -> str:
+        if value is None:
+            return "—"
+        return fmt_pct(value, 2) if ratio_is_yield else f"{fmt_num(value, 2)}x"
+
+    ui.kpi_row(
+        [
+            {"label": "Cours actuel", "value": fmt_num(price, 2) + " MAD",
+             "sub": "BVC, dernier cours", "tone": "blue"},
+            {"label": "Ratio actuel", "value": ratio_text(current),
+             "sub": spec["metric"], "tone": "accent"},
+            {"label": "Hypothèse cible", "value": ratio_text(target),
+             "sub": spec["target_label"], "tone": "info"},
+            {"label": "Prix théorique", "value": fmt_num(fair, 2) + " MAD",
+             "sub": "selon vos hypothèses", "tone": "up"},
+            {"label": "Prix d'entrée", "value": fmt_num(entry, 2) + " MAD",
+             "sub": f"marge {fmt_pct(required_margin, 0)}", "tone": "accent"},
+        ],
+        per_row=5,
+    )
+
+    body = (
+        f"Valeur théorique : **{fmt_num(fair, 2)} MAD** par action. "
+        f"Écart avec le cours : **{fmt_pct(result.get('upside'), 1, signed=True)}**. "
+        f"Prix d'entrée avec une marge de sécurité de {fmt_pct(required_margin, 0)} : "
+        f"**{fmt_num(entry, 2)} MAD**. "
+        f"Marge de sécurité observée au cours actuel : **{fmt_pct(result.get('margin_of_safety'), 1, signed=True)}**."
+    )
+    tone = {"up": "up", "down": "down", "info": "info"}.get(zone.get("tone"), "info")
+    ui.verdict(zone.get("label", "Prix théorique calculé"), body, COLORS["primary"] if tone == "up"
+               else COLORS["danger"] if tone == "down" else COLORS["accent"])
+    ui.note(zone.get("text") or "", tone, "🎯")
+
+    assumptions = pd.DataFrame(
+        [
+            {"Paramètre": "Méthode", "Valeur": spec["label"]},
+            {"Paramètre": "Métrique de référence", "Valeur": spec["metric"]},
+            {"Paramètre": "Valeur de la métrique",
+             "Valeur": f"{fmt_num(result.get('metric_value'), 2)} {spec['metric_unit']}"},
+            {"Paramètre": "Ratio cible", "Valeur": ratio_text(target)},
+            {"Paramètre": "Marge de sécurité exigée", "Valeur": fmt_pct(required_margin, 1)},
+            {"Paramètre": "Nombre d'actions", "Valeur": fmt_num(shares, 0) if shares else "—"},
+            {"Paramètre": "Dette nette", "Valeur": fmt_money(net_debt, "MAD", compact=True)},
+            {"Paramètre": "Exercice comptable", "Valeur": str(f.get("fiscal_year") or "non renseigné")},
+            {"Paramètre": "Source documentaire", "Valeur": str(f.get("source") or "non renseignée")},
+            {"Paramètre": "Mise à jour de la fiche", "Valeur": str(f.get("as_of") or "non renseignée")},
+        ]
+    )
+    with st.expander("📋 Hypothèses et traçabilité", expanded=False):
+        ui.table(assumptions, height=360, key="lab_assumptions")
+
+    table = lab.sensitivity(
+        method, target, f, price=price, net_debt=net_debt, shares=shares,
+        required_margin=required_margin, metric_override=metric_override, steps=9,
+    )
+    if not table.empty and table["Prix théorique"].notna().any():
+        display = table.copy()
+        display["Hypothèse cible"] = display["Hypothèse cible"].apply(
+            lambda v: fmt_pct(v, 2) if ratio_is_yield else f"{v:.2f}x"
+        )
+        display["Prix théorique"] = display["Prix théorique"].apply(lambda v: fmt_num(v, 2))
+        display["Prix d'entrée"] = display["Prix d'entrée"].apply(lambda v: fmt_num(v, 2))
+        display["Écart vs cours"] = display["Écart vs cours"].apply(lambda v: fmt_pct(v, 1, signed=True))
+        display = display.drop(columns=["Disponible"])
+        with st.expander("📈 Sensibilité au multiple cible", expanded=True):
+            c1, c2 = st.columns([1.1, 1])
+            with c1:
+                ui.table(display, height=340, key="lab_sensitivity_table")
+            with c2:
+                fig = go.Figure()
+                x = table["Hypothèse cible"]
+                fig.add_trace(go.Scatter(
+                    x=x, y=table["Prix théorique"], mode="lines+markers",
+                    name="Prix théorique", line=dict(color=COLORS["primary"], width=2.4),
+                ))
+                fig.add_trace(go.Scatter(
+                    x=x, y=table["Prix d'entrée"], mode="lines",
+                    name="Prix d'entrée", line=dict(color=COLORS["accent"], width=1.8, dash="dash"),
+                ))
+                fig.add_hline(y=price, line_dash="dot", line_color=COLORS["warning"],
+                              annotation_text="Cours actuel", annotation_position="bottom right")
+                fig.add_vline(x=target, line_dash="dot", line_color=COLORS["muted"])
+                fig.update_layout(height=340, margin=dict(l=10, r=10, t=20, b=30))
+                ui.plot(fig, key="lab_sensitivity_chart")
+
+    ui.note(
+        "**Limites** : le prix théorique dépend entièrement de la métrique, de l'exercice comptable, "
+        "du nombre d'actions et du multiple retenu. Il ne s'agit ni d'un objectif de cours, ni d'une "
+        "prévision, ni d'une recommandation d'achat. Vérifiez la source et la date des états financiers.",
+        "warn", "⚠️",
+    )
+
+    _valuation_report(
+        symbol=str(row.get("symbol") or ""),
+        name=str(row.get("name") or ""),
+        spec=spec,
+        f=f,
+        row=row,
+        price=price,
+        target=target,
+        ratio_text=ratio_text,
+        fair=fair,
+        entry=entry,
+        required_margin=required_margin,
+        result=result,
+        zone=zone,
+        display=display if "display" in locals() else pd.DataFrame(),
+        shares=shares,
+        net_debt=net_debt,
+        as_of=shared.last_market_date(table),
+    )
+
+
+def _valuation_report(symbol: str, name: str, spec: Dict[str, Any], f: Dict[str, Any],
+                      row: pd.Series, price: Optional[float], target: float,
+                      ratio_text: Any, fair: Optional[float], entry: Optional[float],
+                      required_margin: float, result: Dict[str, Any], zone: Dict[str, str],
+                      display: pd.DataFrame, shares: Optional[float], net_debt: float,
+                      as_of: str) -> None:
+    """Construit un rapport PDF traçable du calcul de prix d'entrée."""
+    lines = [
+        f"## Valorisation — {spec.get('label')}",
+        "",
+        "### Hypothèses",
+        f"- Cours actuel : **{fmt_num(price, 2)} MAD** (clôture du {as_of}).",
+        f"- Métrique de référence : **{spec.get('metric')} = {fmt_num(result.get('metric_value'), 2)} "
+        f"{spec.get('metric_unit', '')}**.",
+        f"- Ratio cible : **{ratio_text(target)}** ({spec.get('target_label')}).",
+        f"- Marge de sécurité exigée : **{fmt_pct(required_margin, 1)}**.",
+        f"- Nombre d'actions : **{fmt_num(shares, 0) if shares else 'non renseigné'}**.",
+        f"- Dette nette : **{fmt_money(net_debt, 'MAD', compact=True)}**.",
+        f"- Exercice comptable : **{f.get('fiscal_year') or 'non renseigné'}** · "
+        f"source : **{f.get('source') or 'non renseignée'}** · mise à jour : **{f.get('as_of') or 'non renseignée'}**.",
+        "",
+        "### Résultat",
+        f"- Prix théorique : **{fmt_num(fair, 2)} MAD**.",
+        f"- Prix d'entrée avec marge : **{fmt_num(entry, 2)} MAD**.",
+        f"- Écart avec le cours : **{fmt_pct(result.get('upside'), 1, signed=True)}**.",
+        f"- Marge de sécurité observée au cours actuel : "
+        f"**{fmt_pct(result.get('margin_of_safety'), 1, signed=True)}**.",
+        f"- Position : **{zone.get('label', '—')}** — {zone.get('text', '')}",
+    ]
+    if not display.empty:
+        lines += [
+            "",
+            "### Sensibilité au multiple cible",
+            "",
+            "| Hypothèse cible | Prix théorique | Prix d'entrée | Écart vs cours |",
+            "|---|---|---|---|",
+        ]
+        for _, item in display.iterrows():
+            lines.append("| {} | {} | {} | {} |".format(
+                item.get("Hypothèse cible"),
+                item.get("Prix théorique"),
+                item.get("Prix d'entrée"),
+                item.get("Écart vs cours"),
+            ))
+    lines += [
+        "",
+        "### Limites",
+        "Le prix théorique dépend de la métrique, de l'exercice comptable, du nombre d'actions, "
+        "du multiple cible et de la marge de sécurité. Il ne s'agit ni d'un objectif de cours, ni "
+        "d'une prévision, ni d'une recommandation d'achat. Vérifiez la source et la date des états "
+        "financiers avant toute décision.",
+    ]
+    ratios_raw = fundamentals.compute_ratios(f, price=price, cap=row.get("cap"))
+    ratios = {k: fundamentals.interpret_ratio(k, v) for k, v in ratios_raw.items()}
+    result_payload = {
+        "symbol": symbol,
+        "row": row.to_dict(),
+        "ratios": ratios,
+        "sources": [
+            "Bourse de Casablanca (cours, nombre de titres, dividende)",
+            "États financiers saisis/importés par l'utilisateur",
+            "Valuation Lab — calcul déterministe, hypothèses explicites",
+        ],
+        "as_of": as_of,
+        "fundamentals_source": str(f.get("source") or ""),
+    }
+    report_result = {
+        "symbol": symbol,
+        "provider": "Valuation Lab",
+        "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "text": "\n".join(lines),
+        "payload": result_payload,
+    }
+    st.caption(
+        "Le rapport PDF reprend le cours, la métrique, le multiple cible, la marge, le prix "
+        "théorique, le prix d'entrée, la sensibilité, les sources et les limites."
+    )
+    download_analysis(report_result, symbol, key="valuation_lab_report")
 
 
 # ═══════════════════════════ Sélection et hypothèses ═══════════════════════════

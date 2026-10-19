@@ -283,14 +283,17 @@ def compute_ratios(f: Dict[str, Any], price: Optional[float] = None, cap: Option
     ev = (cap + debt - cash) if cap is not None else None
 
     ratios: Dict[str, Optional[float]] = {}
-    ratios["per"] = safe_div(price, eps)
-    ratios["pb"] = safe_div(price, bvps)
-    ratios["ps"] = safe_div(cap, revenue)
-    ratios["ev_ebitda"] = safe_div(ev, ebitda)
-    ratios["ev_sales"] = safe_div(ev, revenue)
-    ratios["dividend_yield"] = safe_div(dps, price)
-    ratios["payout"] = rec.get("payout") if rec.get("payout") is not None else safe_div(
-        (dps * shares) if (dps and shares) else None, net_income
+    # Les ratios de valorisation ne sont calculés que si le dénominateur est
+    # strictement positif : un PER ou un EV/EBITDA négatif n'a pas de sens économique.
+    ratios["per"] = safe_div(price, eps) if (eps is not None and eps > 0) else None
+    ratios["pb"] = safe_div(price, bvps) if (bvps is not None and bvps > 0) else None
+    ratios["ps"] = safe_div(cap, revenue) if (revenue is not None and revenue > 0) else None
+    ratios["ev_ebitda"] = safe_div(ev, ebitda) if (ebitda is not None and ebitda > 0) else None
+    ratios["ev_sales"] = safe_div(ev, revenue) if (revenue is not None and revenue > 0) else None
+    ratios["dividend_yield"] = safe_div(dps, price) if (dps is not None and dps > 0) else None
+    ratios["payout"] = rec.get("payout") if rec.get("payout") is not None else (
+        safe_div((dps * shares) if (dps and shares) else None, net_income)
+        if (net_income is not None and net_income > 0) else None
     )
     ratios["roe"] = safe_div(net_income, equity)
     ratios["roa"] = safe_div(net_income, rec.get("total_assets"))
@@ -302,9 +305,9 @@ def compute_ratios(f: Dict[str, Any], price: Optional[float] = None, cap: Option
     ratios["net_debt_to_ebitda"] = safe_div((debt - cash), ebitda)
     ratios["current_ratio"] = safe_div(rec.get("current_assets"), rec.get("current_liabilities"))
     ratios["interest_coverage"] = safe_div(rec.get("ebit"), rec.get("interest_expense"))
-    ratios["fcf_yield"] = safe_div(fcf, cap)
-    ratios["earnings_yield"] = safe_div(eps, price)
-    ratios["book_to_price"] = safe_div(bvps, price)
+    ratios["fcf_yield"] = safe_div(fcf, cap) if (cap is not None and cap > 0) else None
+    ratios["earnings_yield"] = safe_div(eps, price) if (eps is not None and eps > 0) else None
+    ratios["book_to_price"] = safe_div(bvps, price) if (bvps is not None and bvps > 0) else None
     ratios["asset_turnover"] = safe_div(revenue, rec.get("total_assets"))
     ratios["revenue_growth"] = rec.get("revenue_growth")
     ratios["net_income_growth"] = rec.get("net_income_growth")

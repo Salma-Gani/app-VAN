@@ -1,7 +1,7 @@
 """Comparateur de projets d'investissement : VAN, TRI, payback et sensibilité.
 
 Reprend l'outil historique de l'application (comparaison Projet A / Projet B) dans le
-thème EcoInvest Pro.
+thème Market Mind.
 """
 from __future__ import annotations
 

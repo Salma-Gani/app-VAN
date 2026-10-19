@@ -31,7 +31,7 @@ def render() -> None:
     ui.note(
         "**Confidentialité** : vos revenus, actifs, dettes et positions restent stockés localement "
         "dans `data/user/`. Ils ne sont jamais envoyés à un modèle de langage sans votre accord explicite "
-        "(onglet Configuration de l'AI Market Intelligence).",
+        "(onglet Configuration de Market Mind AI).",
         "info", "🔒",
     )
 

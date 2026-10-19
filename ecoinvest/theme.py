@@ -1,4 +1,4 @@
-"""Thème visuel institutionnel (fond clair) + template Plotly « atlas »."""
+"""Thème visuel institutionnel (fond clair) + template Plotly « marketmind »."""
 from __future__ import annotations
 
 import plotly.graph_objects as go
@@ -24,7 +24,7 @@ FONT_IMPORT = (
 
 def register_plotly_template() -> str:
     """Enregistre et active un template Plotly clair, sobre et lisible."""
-    name = "atlas"
+    name = "marketmind"
     grid = "rgba(11,37,69,0.08)"
     zero = "rgba(11,37,69,0.18)"
     layout = go.Layout(
@@ -71,7 +71,7 @@ def register_plotly_template() -> str:
 
 
 def inject_css() -> None:
-    """Feuille de style globale : identité Atlas Finance, fond clair."""
+    """Feuille de style globale : identité Market Mind, fond clair."""
     c = COLORS
     st.markdown(
         f"""
@@ -99,8 +99,8 @@ def inject_css() -> None:
         p, li, span, label {{ color: {c['text']}; }}
         .ei-muted {{ color: {c['muted']}; }}
         [data-testid="stCaptionContainer"] {{ color: {c['muted']}; }}
-        .af-serif {{ font-family: {FONT_DISPLAY}; }}
-        .af-mono, .ei-mono {{
+        .mm-serif {{ font-family: {FONT_DISPLAY}; }}
+        .mm-mono, .ei-mono {{
             font-family: {FONT_MONO}; font-variant-numeric: tabular-nums;
             font-size: .92em; letter-spacing: -0.01em;
         }}
@@ -133,7 +133,7 @@ def inject_css() -> None:
             border-radius: 14px !important;
             box-shadow: 0 1px 2px rgba(11,37,69,0.04), 0 10px 28px rgba(11,37,69,0.05);
         }}
-        .ei-card, .af-card {{
+        .ei-card, .mm-card {{
             background: {c['surface']};
             border: 1px solid {c['border']};
             border-radius: 14px;
@@ -141,7 +141,7 @@ def inject_css() -> None:
             box-shadow: 0 1px 2px rgba(11,37,69,0.04), 0 10px 26px rgba(11,37,69,0.05);
             height: 100%;
         }}
-        .ei-card.accent, .af-card.accent {{ border-top: 3px solid {c['primary']}; }}
+        .ei-card.accent, .mm-card.accent {{ border-top: 3px solid {c['primary']}; }}
         .ei-card.blue   {{ border-top: 3px solid {c['accent']}; }}
         .ei-card.info   {{ border-top: 3px solid {c['accent']}; }}
         .ei-card.up     {{ border-top: 3px solid {c['up']}; }}
@@ -174,114 +174,114 @@ def inject_css() -> None:
         .ei-hero h1 {{ margin: 0; font-size: 2.05rem; color: {c['text']}; }}
         .ei-hero p {{ margin: .4rem 0 0; color: {c['muted']}; max-width: 70ch; }}
 
-        /* ── Accueil Atlas ─────────────────────────────────── */
-        .af-brandbar {{
+        /* ── Accueil Market Mind ─────────────────────────────────── */
+        .mm-brandbar {{
             display: flex; align-items: baseline; gap: 14px;
             padding: 2px 2px 14px; border-bottom: 1px solid {c['border']};
             margin-bottom: 22px;
         }}
-        .af-wordmark {{
+        .mm-wordmark {{
             font-family: {FONT_DISPLAY}; font-size: 1.28rem; font-weight: 700;
             letter-spacing: .12em; color: {c['text']};
         }}
-        .af-wordmark span {{ color: {c['primary']}; }}
-        .af-brandsub {{
+        .mm-wordmark span {{ color: {c['primary']}; }}
+        .mm-brandsub {{
             font-size: .68rem; letter-spacing: .16em; text-transform: uppercase;
             color: {c['muted']}; font-weight: 600;
         }}
-        .af-hero {{
+        .mm-hero {{
             display: grid; grid-template-columns: 1.35fr .9fr; gap: 26px;
             padding: 34px 0 26px;
         }}
-        .af-eyebrow {{
+        .mm-eyebrow {{
             font-size: .7rem; font-weight: 700; letter-spacing: .18em;
             text-transform: uppercase; color: {c['primary']}; margin-bottom: 12px;
         }}
-        .af-title {{
+        .mm-title {{
             font-family: {FONT_DISPLAY}; font-size: 3.05rem; line-height: 1.06;
             font-weight: 500; letter-spacing: -0.03em; color: {c['text']}; margin: 0 0 14px;
         }}
-        .af-title em {{ font-style: italic; color: {c['primary']}; }}
-        .af-lede {{
+        .mm-title em {{ font-style: italic; color: {c['primary']}; }}
+        .mm-lede {{
             font-size: 1.02rem; line-height: 1.65; color: {c['muted']};
             max-width: 60ch; margin: 0 0 18px;
         }}
-        .af-pulse {{
+        .mm-pulse {{
             background: {c['surface']}; border: 1px solid {c['border']};
             border-radius: 16px; padding: 18px 20px; height: 100%;
             box-shadow: 0 1px 2px rgba(11,37,69,0.04), 0 12px 30px rgba(11,37,69,0.06);
         }}
-        .af-pulse-head {{
+        .mm-pulse-head {{
             display: flex; justify-content: space-between; align-items: center;
             font-size: .68rem; font-weight: 700; letter-spacing: .14em;
             text-transform: uppercase; color: {c['muted']}; margin-bottom: 12px;
         }}
-        .af-index-row {{
+        .mm-index-row {{
             display: flex; align-items: baseline; justify-content: space-between;
             padding: 9px 0; border-bottom: 1px dashed {c['border']};
         }}
-        .af-index-row:last-child {{ border-bottom: none; }}
-        .af-index-name {{ font-weight: 600; font-size: .87rem; color: {c['text']}; }}
-        .af-index-val {{ font-family: {FONT_MONO}; font-size: .92rem; color: {c['text']}; }}
-        .af-delta {{
+        .mm-index-row:last-child {{ border-bottom: none; }}
+        .mm-index-name {{ font-weight: 600; font-size: .87rem; color: {c['text']}; }}
+        .mm-index-val {{ font-family: {FONT_MONO}; font-size: .92rem; color: {c['text']}; }}
+        .mm-delta {{
             font-family: {FONT_MONO}; font-size: .78rem; font-weight: 700;
             margin-left: 7px; display: inline-block;
         }}
-        .af-delta.up {{ color: {c['up']}; }}
-        .af-delta.down {{ color: {c['down']}; }}
-        .af-delta.flat {{ color: {c['muted']}; }}
+        .mm-delta.up {{ color: {c['up']}; }}
+        .mm-delta.down {{ color: {c['down']}; }}
+        .mm-delta.flat {{ color: {c['muted']}; }}
 
-        .af-section-label {{
+        .mm-section-label {{
             font-size: .7rem; font-weight: 700; letter-spacing: .16em;
             text-transform: uppercase; color: {c['muted']};
             margin: 30px 0 14px; display: flex; align-items: center; gap: 10px;
         }}
-        .af-section-label::after {{
+        .mm-section-label::after {{
             content: ""; height: 1px; background: {c['border']}; flex: 1;
         }}
 
-        .af-category {{
+        .mm-category {{
             background: {c['surface']}; border: 1px solid {c['border']};
             border-radius: 14px; padding: 18px 18px 12px; height: 100%;
             transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
         }}
-        .af-category:hover {{
+        .mm-category:hover {{
             border-color: {c['primary']}; transform: translateY(-2px);
             box-shadow: 0 10px 26px rgba(11,37,69,0.09);
         }}
-        .af-cat-icon {{
+        .mm-cat-icon {{
             width: 38px; height: 38px; border-radius: 10px; display: flex;
             align-items: center; justify-content: center; font-size: 1.05rem;
             background: rgba(15,118,110,0.10); color: {c['primary']}; margin-bottom: 12px;
         }}
-        .af-cat-title {{ font-weight: 700; font-size: 1rem; margin-bottom: 4px; color: {c['text']}; }}
-        .af-cat-desc {{ font-size: .82rem; line-height: 1.5; color: {c['muted']}; min-height: 3.1em; }}
+        .mm-cat-title {{ font-weight: 700; font-size: 1rem; margin-bottom: 4px; color: {c['text']}; }}
+        .mm-cat-desc {{ font-size: .82rem; line-height: 1.5; color: {c['muted']}; min-height: 3.1em; }}
 
-        .af-ticker {{
+        .mm-ticker {{
             display: flex; gap: 0; overflow: hidden; border: 1px solid {c['border']};
             border-radius: 12px; background: {c['surface']};
         }}
-        .af-ticker-item {{
+        .mm-ticker-item {{
             flex: 1; padding: 10px 14px; border-right: 1px solid {c['border']};
             min-width: 0;
         }}
-        .af-ticker-item:last-child {{ border-right: none; }}
-        .af-ticker-name {{
+        .mm-ticker-item:last-child {{ border-right: none; }}
+        .mm-ticker-name {{
             font-size: .64rem; letter-spacing: .1em; text-transform: uppercase;
             color: {c['muted']}; font-weight: 700;
         }}
-        .af-ticker-val {{ font-family: {FONT_MONO}; font-size: .95rem; font-weight: 600; }}
+        .mm-ticker-val {{ font-family: {FONT_MONO}; font-size: .95rem; font-weight: 600; }}
 
-        .af-news-item {{
+        .mm-news-item {{
             padding: 10px 0; border-bottom: 1px solid {c['border']};
         }}
-        .af-news-item:last-child {{ border-bottom: none; }}
-        .af-news-title {{ font-size: .88rem; line-height: 1.45; font-weight: 600; color: {c['text']}; }}
-        .af-news-meta {{ font-size: .7rem; color: {c['muted']}; margin-top: 3px; }}
-        .af-news-title a {{ color: {c['text']}; text-decoration: none; }}
-        .af-news-title a:hover {{ color: {c['primary']}; }}
+        .mm-news-item:last-child {{ border-bottom: none; }}
+        .mm-news-title {{ font-size: .88rem; line-height: 1.45; font-weight: 600; color: {c['text']}; }}
+        .mm-news-meta {{ font-size: .7rem; color: {c['muted']}; margin-top: 3px; }}
+        .mm-news-title a {{ color: {c['text']}; text-decoration: none; }}
+        .mm-news-title a:hover {{ color: {c['primary']}; }}
 
-        .af-ai-card {{
+        .mm-ai-card {{
             background: linear-gradient(135deg, rgba(15,118,110,0.08), rgba(18,59,109,0.06));
             border: 1px solid rgba(15,118,110,0.28); border-radius: 14px; padding: 18px 20px;
         }}

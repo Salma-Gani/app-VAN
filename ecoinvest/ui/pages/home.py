@@ -1,4 +1,4 @@
-"""Accueil Atlas Finance : centre de pilotage et vue synthétique du marché."""
+"""Accueil Market Mind : centre de pilotage et vue synthétique du marché."""
 from __future__ import annotations
 
 import html
@@ -97,10 +97,10 @@ def render() -> None:
 def _brandbar(snapshot: pd.DataFrame) -> None:
     st.markdown(
         f"""
-        <div class="af-brandbar">
-          <div class="af-wordmark">ATLAS <span>FINANCE</span></div>
-          <div class="af-brandsub">{_esc(APP_TAGLINE)}</div>
-          <div class="af-brandsub" style="margin-left:auto">
+        <div class="mm-brandbar">
+          <div class="mm-wordmark">MARKET <span>MIND</span></div>
+          <div class="mm-brandsub">{_esc(APP_TAGLINE)}</div>
+          <div class="mm-brandsub" style="margin-left:auto">
             Bourse de Casablanca · {_esc(_last_date(snapshot))}
           </div>
         </div>
@@ -114,10 +114,10 @@ def _hero(regime: Dict[str, Any], indices: pd.DataFrame, universe: pd.DataFrame)
     with left:
         st.markdown(
             f"""
-            <div class="af-eyebrow">Investment intelligence platform</div>
-            <h1 class="af-title">Votre capital. Votre stratégie.<br>
+            <div class="mm-eyebrow">Investment intelligence platform</div>
+            <h1 class="mm-title">Votre capital. Votre stratégie.<br>
               <em>Une vision plus claire.</em></h1>
-            <p class="af-lede">
+            <p class="mm-lede">
               Analysez les marchés, comprenez les risques et explorez les opportunités
               d'investissement. Données de marché réelles, hypothèses explicites,
               aucune donnée fondamentale inventée.
@@ -167,22 +167,22 @@ def _pulse_html(indices: pd.DataFrame, regime: Dict[str, Any]) -> str:
         row = sub.iloc[0]
         change = row.get("change_pct")
         rows.append(
-            f'<div class="af-index-row"><span class="af-index-name">{_esc(label)}</span>'
-            f'<span><span class="af-index-val">{_num(row.get("value"))}</span> '
-            f'<span class="af-delta {_tone(change)}">{_pct(change)}</span></span></div>'
+            f'<div class="mm-index-row"><span class="mm-index-name">{_esc(label)}</span>'
+            f'<span><span class="mm-index-val">{_num(row.get("value"))}</span> '
+            f'<span class="mm-delta {_tone(change)}">{_pct(change)}</span></span></div>'
         )
     vix_level = vix.get("level")
     vix_change = vix.get("change")
     rows.append(
-        f'<div class="af-index-row"><span class="af-index-name">VIX</span>'
-        f'<span><span class="af-index-val">{_num(vix_level)}</span> '
-        f'<span class="af-delta {_tone(vix_change)}">{_pct(vix_change)}</span></span></div>'
+        f'<div class="mm-index-row"><span class="mm-index-name">VIX</span>'
+        f'<span><span class="mm-index-val">{_num(vix_level)}</span> '
+        f'<span class="mm-delta {_tone(vix_change)}">{_pct(vix_change)}</span></span></div>'
     )
     gate = regime.get("entry_gate")
     gate_tone = "up" if (gate or 0) >= 0.1 else "down" if (gate or 0) <= -0.1 else "flat"
     return f"""
-    <div class="af-pulse">
-      <div class="af-pulse-head"><span>Market Pulse</span><span>Données différées</span></div>
+    <div class="mm-pulse">
+      <div class="mm-pulse-head"><span>Market Pulse</span><span>Données différées</span></div>
       {''.join(rows)}
       <div style="margin-top:12px">
         {ui.badge(regime.get("label", "Régime indisponible"), gate_tone)}
@@ -196,7 +196,7 @@ def _pulse_html(indices: pd.DataFrame, regime: Dict[str, Any]) -> str:
 
 
 def _categories() -> None:
-    st.markdown('<div class="af-section-label">Explorer la plateforme</div>', unsafe_allow_html=True)
+    st.markdown('<div class="mm-section-label">Explorer la plateforme</div>', unsafe_allow_html=True)
     cards = [
         ("dashboard", "🌍", "Vue globale du marché",
          "Indices, cotations, tendances et actualités en un coup d'œil."),
@@ -206,8 +206,8 @@ def _categories() -> None:
          "Ratios, valorisation, cash-flows et couverture des données."),
         ("profile_page", "👤", "Mon patrimoine",
          "Revenus, actifs, dettes, profil de risque et portefeuille."),
-        ("ai_page", "🧠", "AI Market Intelligence",
-         "Sentiment, scénarios et analyse croisée, avec facteurs explicites."),
+        ("ai_page", "🧠", "Market Mind AI",
+         "Analyse directe, scénarios, sources, rapport PDF et alertes explicables."),
         ("portfolio_builder", "⚖️", "Comparateur d'investissements",
          "Comparez votre portefeuille à des alternatives, coûts inclus."),
     ]
@@ -217,9 +217,9 @@ def _categories() -> None:
             with col:
                 with st.container(border=True):
                     st.markdown(
-                        f'<div class="af-cat-icon">{icon}</div>'
-                        f'<div class="af-cat-title">{_esc(title)}</div>'
-                        f'<div class="af-cat-desc">{_esc(desc)}</div>',
+                        f'<div class="mm-cat-icon">{icon}</div>'
+                        f'<div class="mm-cat-title">{_esc(title)}</div>'
+                        f'<div class="mm-cat-desc">{_esc(desc)}</div>',
                         unsafe_allow_html=True,
                     )
                     if st.button("Explorer →", key=f"home_card_{key}", use_container_width=True):
@@ -231,7 +231,7 @@ def _categories() -> None:
 
 
 def _market_pulse(snapshot: pd.DataFrame, indices: pd.DataFrame, regime: Dict[str, Any]) -> None:
-    st.markdown('<div class="af-section-label">Marché — synthèse de la séance</div>',
+    st.markdown('<div class="mm-section-label">Marché — synthèse de la séance</div>',
                 unsafe_allow_html=True)
     left, right = st.columns([1.7, 1], gap="large")
     with left:
@@ -263,7 +263,7 @@ def _regime_card(regime: Dict[str, Any]) -> None:
     tone = "up" if (gate or 0) >= 0.1 else "down" if (gate or 0) <= -0.1 else "flat"
     st.markdown(
         f"""
-        <div class="af-card">
+        <div class="mm-card">
           <div class="ei-kpi-label">Lecture du marché</div>
           <div style="margin:.5rem 0">{ui.badge(regime.get("label", "Indisponible"), tone)}</div>
           <div style="display:flex;gap:18px;margin-top:10px">
@@ -294,15 +294,15 @@ def _movers(snapshot: pd.DataFrame) -> None:
     rows = []
     for _, r in pd.concat([up, down]).iterrows():
         rows.append(
-            f'<div class="af-index-row" style="padding:6px 0">'
-            f'<span class="af-index-name">{_esc(r.get("symbol"))} '
+            f'<div class="mm-index-row" style="padding:6px 0">'
+            f'<span class="mm-index-name">{_esc(r.get("symbol"))} '
             f'<span class="ei-muted" style="font-weight:400">· {_esc(str(r.get("name"))[:18])}</span></span>'
-            f'<span><span class="af-index-val">{_num(r.get("close"))}</span> '
-            f'<span class="af-delta {_tone(r.get("change_pct"))}">{_pct(r.get("change_pct"))}</span></span>'
+            f'<span><span class="mm-index-val">{_num(r.get("close"))}</span> '
+            f'<span class="mm-delta {_tone(r.get("change_pct"))}">{_pct(r.get("change_pct"))}</span></span>'
             f'</div>'
         )
     st.markdown(
-        f'<div class="af-card"><div class="ei-kpi-label">Mouvements de la séance</div>'
+        f'<div class="mm-card"><div class="ei-kpi-label">Mouvements de la séance</div>'
         f'{"".join(rows)}</div>',
         unsafe_allow_html=True,
     )
@@ -314,7 +314,7 @@ def _movers(snapshot: pd.DataFrame) -> None:
 def _news_and_ai(regime: Dict[str, Any], snapshot: pd.DataFrame, news_df: pd.DataFrame) -> None:
     left, right = st.columns([1.5, 1], gap="large")
     with left:
-        st.markdown('<div class="af-section-label">À la une</div>', unsafe_allow_html=True)
+        st.markdown('<div class="mm-section-label">À la une</div>', unsafe_allow_html=True)
         with st.container(border=True):
             if news_df is None or news_df.empty:
                 ui.empty_state("Aucune actualité chargée pour le moment.", "📰")
@@ -324,10 +324,10 @@ def _news_and_ai(regime: Dict[str, Any], snapshot: pd.DataFrame, news_df: pd.Dat
                     link = str(row.get("link") or "")
                     safe_link = link if link.startswith(("http://", "https://")) else "#"
                     st.markdown(
-                        f'<div class="af-news-item">'
-                        f'<div class="af-news-title"><a href="{_esc(safe_link)}" target="_blank" '
+                        f'<div class="mm-news-item">'
+                        f'<div class="mm-news-title"><a href="{_esc(safe_link)}" target="_blank" '
                         f'rel="noopener noreferrer">{_esc(row.get("title"))}</a></div>'
-                        f'<div class="af-news-meta">{_esc(row.get("source"))} · '
+                        f'<div class="mm-news-meta">{_esc(row.get("source"))} · '
                         f'{_esc(_when(row.get("published")))} · '
                         f'{ui.badge(str(row.get("sentiment_label") or "Neutre"), tone)}</div>'
                         f'</div>',
@@ -335,7 +335,7 @@ def _news_and_ai(regime: Dict[str, Any], snapshot: pd.DataFrame, news_df: pd.Dat
                     )
 
     with right:
-        st.markdown('<div class="af-section-label">Lecture Atlas</div>', unsafe_allow_html=True)
+        st.markdown('<div class="mm-section-label">Lecture Market Mind</div>', unsafe_allow_html=True)
         top = None
         if snapshot is not None and not snapshot.empty and "return_12m" in snapshot.columns:
             up = snapshot.dropna(subset=["return_12m", "change_pct"])
@@ -356,7 +356,7 @@ def _news_and_ai(regime: Dict[str, Any], snapshot: pd.DataFrame, news_df: pd.Dat
         if (regime.get("news") or {}).get("label"):
             lines.append(f"Sentiment presse : <b>{_esc((regime.get('news') or {}).get('label'))}</b>.")
         st.markdown(
-            f'<div class="af-ai-card"><div class="ei-kpi-label">Synthèse explicable</div>'
+            f'<div class="mm-ai-card"><div class="ei-kpi-label">Synthèse explicable</div>'
             f'<div style="font-size:.9rem;line-height:1.65;margin-top:8px">'
             f'{"<br>".join(lines)}</div>'
             f'<div class="ei-kpi-sub" style="margin-top:10px">'
@@ -365,7 +365,7 @@ def _news_and_ai(regime: Dict[str, Any], snapshot: pd.DataFrame, news_df: pd.Dat
             unsafe_allow_html=True,
         )
         st.write("")
-        if st.button("Ouvrir AI Market Intelligence →", key="home_ai", use_container_width=True):
+        if st.button("Ouvrir Market Mind AI →", key="home_ai", use_container_width=True):
             _goto("ai_page")
 
 

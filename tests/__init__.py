@@ -1,0 +1,1 @@
+"""Tests unitaires Market Mind."""

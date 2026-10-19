@@ -11,6 +11,7 @@ from ...config import COLORS
 from ...data import fundamentals, news
 from ...utils.formatting import fmt_money, fmt_multiple, fmt_num, fmt_pct
 from .. import charts, components as ui
+from ..reporting import download_analysis
 from . import shared
 
 _TONE_BY_COLOR = {
@@ -466,23 +467,50 @@ def _news_card(item: pd.Series) -> None:
 
 
 def _agent(symbol: str) -> None:
-    ui.section("Analyse de l'agent IA", "Synthèse fondamentale, technique et risque, adaptée à votre profil.")
+    ui.section(
+        "Analyse de l'agent IA",
+        "Synthèse fondamentale, technique et risque, adaptée à votre profil. Le rapport PDF reprend "
+        "les données, les sources, les limites et l'avertissement.",
+    )
     key = f"company_analysis_{symbol}"
-    if st.button("🤖 Générer l'analyse complète", key=f"agent_btn_{symbol}"):
-        with st.spinner("Analyse en cours…"):
-            agent = shared.build_agent()
-            st.session_state[key] = agent.analyse_company(symbol)
-    result = st.session_state.get(key)
-    if result:
-        st.caption(f"Moteur : {result.get('provider') or '—'}")
+    direct_key = f"company_direct_{symbol}"
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("🤖 Générer l'analyse complète", key=f"agent_btn_{symbol}", use_container_width=True):
+            with st.spinner("Analyse en cours…"):
+                agent = shared.build_agent()
+                st.session_state[key] = agent.analyse_company(symbol)
+    with c2:
+        if st.button("⚡ Analyse directe : tendance & scénarios", key=f"agent_direct_btn_{symbol}",
+                     use_container_width=True):
+            with st.spinner("Analyse en cours…"):
+                agent = shared.build_agent()
+                st.session_state[direct_key] = agent.analyse_titre(symbol)
+
+    for label, state_key in (("Analyse complète", key), ("Analyse directe", direct_key)):
+        result = st.session_state.get(state_key)
+        if not result:
+            continue
+        st.markdown(f"#### {label}")
+        st.caption(
+            f"Moteur : {result.get('provider') or '—'} · généré le "
+            f"{result.get('generated_at') or '—'} · valeur : {result.get('symbol') or symbol}"
+        )
         st.markdown(result.get("text") or "")
-    else:
+        download_analysis(result, symbol, key=f"company_{state_key}")
+        st.divider()
+
+    if not st.session_state.get(key) and not st.session_state.get(direct_key):
         ui.note(
             "L'agent combine les données de marché réelles, les indicateurs techniques, les ratios "
             "disponibles et votre profil d'investisseur. Sans clé d'API, il fonctionne en mode "
-            "analyste local hors-ligne.",
+            "analyste local hors-ligne. L'analyse directe ajoute les scénarios haussier/baissier "
+            "et les niveaux d'invalidation observables.",
             "info", "🤖",
         )
+    pages = st.session_state.get("_nav_pages") or {}
+    if "alerts_page" in pages:
+        st.page_link(pages["alerts_page"], label="🔔 Ouvrir le centre d'alertes", icon="🔔")
 
 
 # ═══════════════════════════ Utilitaires ═══════════════════════════

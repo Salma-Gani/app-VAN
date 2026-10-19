@@ -1,4 +1,4 @@
-"""ATLAS FINANCE — point d'entrée Streamlit.
+"""MARKET MIND — point d'entrée Streamlit.
 
 Lancement :  python3 -m streamlit run app.py
 """
@@ -89,6 +89,7 @@ def main() -> None:
     # Import après set_page_config : les pages enregistrent des décorateurs Streamlit.
     from ecoinvest.ui.pages import (
         ai_page,
+        alerts_page,
         company,
         dashboard,
         fundamentals_page,
@@ -99,6 +100,7 @@ def main() -> None:
         projects,
         screener,
         simulator,
+        sources_page,
         valuation,
     )
 
@@ -113,8 +115,10 @@ def main() -> None:
         ("profile_page", "Mon patrimoine", "👤", profile_page.render, "patrimoine"),
         ("simulator", "Simulateur", "📈", simulator.render, "simulateur"),
         ("portfolio_builder", "Portefeuille & alternatives", "💼", portfolio_builder.render, "portefeuille"),
-        ("ai_page", "AI Market Intelligence", "🧠", ai_page.render, "intelligence"),
+        ("ai_page", "Market Mind AI", "🧠", ai_page.render, "intelligence"),
+        ("alerts_page", "Alertes & surveillance", "🔔", alerts_page.render, "alertes"),
         ("projects", "Comparateur de projets", "🌿", projects.render, "projets"),
+        ("sources_page", "Sources & méthodologie", "📚", sources_page.render, "sources"),
     ]
 
     pages = {}
@@ -126,7 +130,7 @@ def main() -> None:
     st.session_state["_nav_pages"] = pages
 
     try:
-        st.logo("assets/atlas_logo.svg", size="large")
+        st.logo("assets/market_mind_logo.svg", size="large")
     except Exception:
         pass
 
@@ -136,8 +140,8 @@ def main() -> None:
             "Marchés": [pages["screener"], pages["company"], pages["news_page"]],
             "Analyse": [pages["valuation"], pages["fundamentals_page"]],
             "Patrimoine": [pages["profile_page"], pages["simulator"], pages["portfolio_builder"]],
-            "Intelligence": [pages["ai_page"]],
-            "Outils": [pages["projects"]],
+            "Intelligence": [pages["ai_page"], pages["alerts_page"]],
+            "Outils": [pages["projects"], pages["sources_page"]],
         },
         position="sidebar",
     )

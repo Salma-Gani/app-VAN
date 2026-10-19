@@ -8,8 +8,9 @@ import streamlit as st
 
 from ...ai import llm as llm_mod
 from ...config import COLORS
-from ...utils.formatting import fmt_num
+from ...utils.formatting import fmt_money, fmt_num, fmt_pct
 from .. import components as ui
+from ..reporting import download_analysis
 from . import shared
 
 _SUGGESTIONS = [
@@ -26,7 +27,7 @@ def render() -> None:
     status = llm_mod.provider_status()
     mode_label = "Modèle de langage" if status["mode"] == "llm" else "Analyste local (hors-ligne)"
     ui.hero(
-        "AI Market Intelligence",
+        "Market Mind AI",
         "Un analyste qui ne travaille qu'avec les données réelles chargées par l'application : "
         "aucun chiffre inventé, aucune recommandation déconnectée du marché.",
         badge=ui.badge(f"{mode_label} · {status['active']}", "up" if status["mode"] == "llm" else "info"),
@@ -56,17 +57,142 @@ def render() -> None:
         "info", "🧠",
     )
 
-    tabs = st.tabs(["💬 Assistant", "📰 Briefing", "🔎 Analyse d'une valeur", "⚙️ Configuration"])
+    tabs = st.tabs(
+        ["⚡ Analyse directe", "💬 Assistant", "📰 Briefing", "🔎 Analyse complète", "⚙️ Configuration"]
+    )
     with tabs[0]:
-        _chat()
+        _direct()
     with tabs[1]:
-        _briefing()
+        _chat()
     with tabs[2]:
-        _company()
+        _briefing()
     with tabs[3]:
+        _company()
+    with tabs[4]:
         _configuration(status)
 
     ui.disclaimer()
+
+
+# ═══════════════════════════ Analyse directe ═══════════════════════════
+
+
+def _direct() -> None:
+    table = shared.market_table()
+    if table.empty:
+        ui.empty_state("Données de marché indisponibles.", "📡")
+        return
+    symbols = table["symbol"].tolist()
+    names = dict(zip(table["symbol"], table["name"]))
+    requested = str(st.session_state.get("selected_symbol") or "").upper()
+    index = symbols.index(requested) if requested in symbols else 0
+
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        symbol = st.selectbox(
+            "Valeur à analyser en direct", symbols, index=index,
+            format_func=lambda s: f"{s} — {names.get(s, s)}", key="ai_direct_symbol",
+        )
+    with c2:
+        st.write("")
+        launch = st.button("⚡ Lancer l'analyse IA", key="ai_direct_btn",
+                           use_container_width=True, type="primary")
+
+    row = table[table["symbol"] == symbol].iloc[0]
+    summary = shared.technical_summary(symbol)
+    levels = (summary.get("levels") or {}) if summary else {}
+    momentum = (summary.get("momentum") or {}) if summary else {}
+    trend = (summary.get("trend") or {}) if summary else {}
+    close = row.get("close")
+    ui.kpi_row(
+        [
+            {"label": "Cours", "value": fmt_num(close, 2) + " MAD",
+             "sub": f"séance {fmt_pct(row.get('change_pct'), 2, signed=True)}", "tone": "accent"},
+            {"label": "Tendance", "value": str(trend.get("state") or "—"),
+             "sub": "moyennes mobiles", "tone": "blue"},
+            {"label": "RSI (14)", "value": fmt_num(momentum.get("rsi"), 1),
+             "sub": str(momentum.get("state") or "—"), "tone": "warn"},
+            {"label": "Support 120 j", "value": fmt_num(levels.get("support"), 2) + " MAD",
+             "sub": f"résistance {fmt_num(levels.get('resistance'), 2)}", "tone": "info"},
+            {"label": "Volume", "value": fmt_money(row.get("volume"), "MAD", compact=True),
+             "sub": f"{fmt_num(row.get('transactions'), 0)} transactions", "tone": "blue"},
+        ],
+        per_row=5,
+    )
+    ui.source_note(
+        ["Bourse de Casablanca (cours, volumes, historique)", "Référentiel BVC (titres, dividende)",
+         "RSS publics (actualités)", "World Bank Open Data (macro Maroc)"],
+        as_of=f"clôture du {shared.last_market_date(table)}",
+        detail="L'analyse combine technique, fondamentaux disponibles et macro ; les données absentes sont signalées.",
+    )
+    pages = st.session_state.get("_nav_pages") or {}
+    if "valuation" in pages:
+        if st.button("🧮 Transformer un objectif de valorisation en prix d'entrée",
+                     key=f"ai_to_valuation_{symbol}", use_container_width=False):
+            st.session_state["selected_symbol"] = symbol
+            st.switch_page(pages["valuation"])
+
+    with st.expander("🧾 Contexte réel transmis à l'agent", expanded=False):
+        st.markdown(
+            f"- **{symbol} — {row.get('name')}** · secteur {row.get('sector') or '—'}\n"
+            f"- Cours **{fmt_num(close, 2)} MAD** · variation **{fmt_pct(row.get('change_pct'), 2, signed=True)}** · "
+            f"volume **{fmt_money(row.get('volume'), 'MAD', compact=True)}**\n"
+            f"- Tendance **{trend.get('state') or '—'}** · momentum **{momentum.get('state') or '—'}** · "
+            f"RSI **{fmt_num(momentum.get('rsi'), 1)}**\n"
+            f"- Support **{fmt_num(levels.get('support'))}** · pivot **{fmt_num(levels.get('pivot'))}** · "
+            f"résistance **{fmt_num(levels.get('resistance'))}**\n"
+            f"- Les ratios fondamentaux ne sont inclus que s'ils sont réellement renseignés ; "
+            f"la macro Maroc provient de la World Bank (séries annuelles différées)."
+        )
+
+    if launch:
+        with st.spinner("L'agent analyse la tendance, les niveaux, les actualités et les données disponibles…"):
+            agent = shared.build_agent(share_amounts=bool(st.session_state.get("ai_share_amounts", False)))
+            st.session_state["ai_direct_result"] = agent.analyse_titre(symbol)
+
+    result = st.session_state.get("ai_direct_result")
+    if result and str(result.get("symbol") or "").upper() == symbol:
+        st.divider()
+        st.caption(
+            f"Moteur : **{result.get('provider') or '—'}** · généré le "
+            f"**{result.get('generated_at') or '—'}** · mode "
+            f"**{result.get('mode') or '—'}**"
+        )
+        st.markdown(result.get("text") or "")
+        download_analysis(result, symbol, key="ai_direct_report")
+        payload = result.get("payload") or {}
+        news_items = payload.get("news") or []
+        if news_items:
+            with st.expander("📰 Actualités utilisées par l'agent", expanded=False):
+                for item in news_items[:6]:
+                    title = str(item.get("title") or "Sans titre")
+                    link = str(item.get("link") or "").strip()
+                    if not link.lower().startswith(("http://", "https://")):
+                        link = ""
+                    rendered = f"[{title}]({link})" if link else f"**{title}**"
+                    st.markdown(
+                        f"- {rendered} — *{item.get('source')}* · "
+                        f"{item.get('published') or 'date n.d.'}"
+                    )
+        ui.note(
+            "**Ce que l'agent ne fait pas** : il ne prédit pas un prix futur, n'invente pas de "
+            "consensus et ne transforme pas une alerte en ordre. Le prix théorique d'entrée se "
+            "configure dans **Valorisation**, avec vos hypothèses et une marge de sécurité.",
+            "info", "🧠",
+        )
+    elif result:
+        ui.note(
+            f"Une analyse existe pour **{result.get('symbol')}**. Sélectionnez cette valeur ou "
+            "lancez une nouvelle analyse pour la valeur courante.",
+            "info", "ℹ️",
+        )
+    else:
+        ui.note(
+            "L'agent utilise uniquement le contexte réel affiché ci-dessus. Sans clé d'API, il répond "
+            "en mode analyste local ; avec une clé Anthropic, OpenAI, DeepSeek ou autre, le même "
+            "contexte est envoyé au modèle et le rapport PDF reste disponible.",
+            "info", "⚡",
+        )
 
 
 # ═══════════════════════════ Chat ═══════════════════════════
@@ -184,8 +310,10 @@ def _company() -> None:
 
     result = st.session_state.get("ai_company_result")
     if result:
-        st.caption(f"Moteur : {result.get('provider') or '—'} · valeur : {result.get('symbol') or symbol}")
+        st.caption(f"Moteur : {result.get('provider') or '—'} · valeur : {result.get('symbol') or symbol} "
+                   f"· généré le {result.get('generated_at') or '—'}")
         st.markdown(result.get("text") or "")
+        download_analysis(result, result.get("symbol") or symbol, key="ai_company_report")
     else:
         ui.note(
             "L'analyse combine tendance, momentum, niveaux techniques, ratios fondamentaux "
