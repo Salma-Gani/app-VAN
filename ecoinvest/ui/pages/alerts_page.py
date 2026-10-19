@@ -8,8 +8,10 @@ import pandas as pd
 import streamlit as st
 
 from ...analytics import alerts as alerts_mod
+from ...analytics import thesis as thesis_mod
 from ...config import COLORS
-from ...utils.formatting import fmt_num, fmt_pct
+from ...data import fundamentals
+from ...utils.formatting import fmt_money, fmt_num, fmt_pct
 from .. import components as ui
 from . import shared
 
@@ -64,6 +66,7 @@ def render() -> None:
             "et de résistance calculés sur l'historique.",
             "info", "🧭",
         )
+        _theses_panel(table)
         _watchlist_panel(watch)
         ui.disclaimer()
         return
@@ -104,6 +107,7 @@ def render() -> None:
             ui.download_row(display, "marketmind_alertes.csv", "⬇️ Exporter les alertes (CSV)",
                             key="alerts_download")
 
+    _theses_panel(table)
     _watchlist_panel(watch)
     st.caption(
         "Méthode : RSI(14), moyennes mobiles, support/résistance 120 jours et drawdown calculés sur "
@@ -208,6 +212,96 @@ def _render_alerts(alerts: List[alerts_mod.Alert]) -> None:
             """,
             unsafe_allow_html=True,
         )
+
+
+def _theses_panel(table: pd.DataFrame) -> None:
+    """Suivi des thèses de valorisation : prix d'entrée et métrique de référence."""
+    theses = thesis_mod.list_for()
+    st.divider()
+    ui.section(
+        "Thèses de valorisation",
+        "Chaque thèse garde votre multiple cible, votre marge de sécurité et la métrique de "
+        "référence. La surveillance porte sur deux conditions : le prix et la mise à jour des résultats.",
+    )
+    if not theses:
+        ui.note(
+            "Aucune thèse enregistrée. Ouvrez **Valorisation & thèses**, calculez un prix théorique "
+            "d'entrée puis cliquez sur « Enregistrer cette hypothèse pour la surveiller ».",
+            "info", "📌",
+        )
+        return
+
+    rows_index = {str(r["symbol"]): r for _, r in table.iterrows()}
+    evaluated: List[Dict[str, Any]] = []
+    for thesis in theses:
+        symbol = str(thesis.get("symbol") or "")
+        row = rows_index.get(symbol)
+        try:
+            f = fundamentals.get_fundamentals(symbol, row)
+        except Exception:
+            f = {}
+        price = float(row.get("close")) if row is not None and pd.notna(row.get("close")) else None
+        evaluated.append(thesis_mod.evaluate(thesis, price, f))
+
+    frame = thesis_mod.to_frame(evaluated)
+    with st.expander("📋 Vue synthétique", expanded=True):
+        display = frame.copy()
+        for column in ("Cible", "Prix théorique", "Prix d'entrée", "Cours actuel"):
+            display[column] = display[column].apply(
+                lambda value: fmt_num(value, 2) if pd.notna(value) else "—"
+            )
+        display["Variation métrique"] = display["Variation métrique"].apply(
+            lambda value: fmt_pct(value, 2, signed=True) if pd.notna(value) else "—"
+        )
+        ui.table(display, height=min(320, 90 + 34 * len(display)), key="theses_table")
+
+    for item in evaluated:
+        status = item.get("status")
+        tone = {"entry_reached": "up", "near": "accent", "stale": "warn",
+                "invalid": "warn"}.get(status, "info")
+        color = COLORS["primary"] if status == "entry_reached" else (
+            COLORS["warning"] if status in ("stale", "invalid") else COLORS["accent"]
+        )
+        metric_change = item.get("metric_change")
+        body = (
+            f"Cours actuel **{fmt_num(item.get('current_price'), 2)} MAD** · "
+            f"prix d'entrée **{fmt_num(item.get('entry_price'), 2)} MAD** "
+            f"({fmt_pct(item.get('distance_entry'), 1, signed=True)} d'écart) · "
+            f"prix théorique **{fmt_num(item.get('target_price'), 2)} MAD**.<br>"
+            f"Métrique suivie : {item.get('metric_label')} = {fmt_num(item.get('metric_value'), 2)} "
+            f"→ actuelle {fmt_num(item.get('current_metric'), 2)}"
+            + (f" ({fmt_pct(metric_change, 2, signed=True)})" if metric_change is not None else "")
+            + f".<br><span class='ei-muted'>Source : {html.escape(str(item.get('source') or '—'))} · "
+            f"exercice {item.get('fiscal_year')} · maj {item.get('as_of') or '—'}</span>"
+        )
+        if item.get("needs_recalc"):
+            body += (
+                "<br><b>⚠️ Recalcul conseillé :</b> la métrique de référence ou l'exercice comptable "
+                "a changé depuis la création de la thèse. Le prix d'entrée doit être recalculé."
+            )
+        if item.get("notes"):
+            body += f"<br><span class='ei-muted'>Note : {html.escape(str(item['notes']))}</span>"
+        st.markdown(
+            f"""
+            <div class="ei-card" style="border-left:4px solid {color};margin-bottom:.55rem">
+              <div style="display:flex;justify-content:space-between;gap:1rem;align-items:baseline">
+                <div><b>{html.escape(str(item.get('symbol')))}</b>
+                  <span class="ei-muted" style="font-size:.8rem">— {html.escape(str(item.get('name') or ''))}</span></div>
+                {ui.badge(str(item.get('status_label') or '—'), tone)}
+              </div>
+              <div class="ei-muted" style="font-size:.84rem;line-height:1.55;margin-top:.3rem">{body}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("🗑️ Supprimer cette thèse", key=f"del_thesis_{item.get('id')}"):
+            thesis_mod.delete(str(item.get("id")), str(item.get("symbol")))
+            st.rerun()
+
+    st.caption(
+        "Une thèse est une condition de surveillance, pas une prévision. Le cours peut ne jamais "
+        "atteindre le prix d'entrée, et l'atteindre ne signifie pas que la société est sous-évaluée."
+    )
 
 
 def _watchlist_panel(watch: List[str]) -> None:

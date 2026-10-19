@@ -344,12 +344,25 @@ def _fundamentals(row: pd.Series, symbol: str) -> None:
     table = fundamentals.ratio_table(f, price=row.get("close"), cap=row.get("cap"))
 
     computed = int(table["Valeur"].notna().sum())
+    statement_status = f.get("statement_status")
     ui.note(
         f"**{computed} ratios calculés** sur {len(table)}. Les ratios proviennent des états "
-        "financiers saisis dans « Données fondamentales » et du cours de bourse réel. "
-        "Aucune donnée n'est inventée : les champs non renseignés restent vides.",
+        "financiers (AMMC, API configurée ou import vérifié) et du cours de bourse réel. "
+        "Aucune donnée n'est inventée : les champs non renseignés restent vides."
+        + (
+            f" Exercice suivi : **{f.get('statement_fiscal_year')}** "
+            f"({statement_status or 'source à vérifier'})."
+            if f.get("statement_source") else ""
+        ),
         "info", "📚",
     )
+    pages = st.session_state.get("_nav_pages") or {}
+    if "statements_page" in pages:
+        st.page_link(
+            pages["statements_page"],
+            label="🧾 Ouvrir les états financiers (bilan, compte de résultat, trésorerie)",
+            icon="🧾",
+        )
 
     key_ratios = ["per", "pb", "dividend_yield", "roe", "net_margin", "debt_to_equity",
                   "fcf_yield", "revenue_growth"]
@@ -378,9 +391,10 @@ def _fundamentals(row: pd.Series, symbol: str) -> None:
 
     if computed == 0:
         ui.note(
-            "Aucun état financier n'est encore saisi pour cette société. Ouvrez la page "
-            "« Données fondamentales » pour les renseigner (ou importer un CSV) : les ratios, "
-            "la valorisation DCF et les signaux fondamentaux seront alors calculés automatiquement.",
+            "Aucun état financier n'est encore disponible pour cette société. Ouvrez la page "
+            "« États financiers » pour importer le bilan, le CPC et la trésorerie (API, CSV "
+            "vérifié ou documents AMMC) : les ratios, la valorisation et les signaux "
+            "fondamentaux seront alors calculés automatiquement.",
             "warn", "⚙️",
         )
 

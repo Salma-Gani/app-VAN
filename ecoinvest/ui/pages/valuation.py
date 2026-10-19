@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from ...analytics import forecast
+from ...analytics import thesis as thesis_mod
 from ...analytics import valuation_lab as lab
 from ...config import COLORS, RISK_FREE_RATE
 from ...data import fundamentals
@@ -333,6 +334,18 @@ def _valuation_lab(row: pd.Series, f: Dict[str, Any]) -> None:
         "warn", "⚠️",
     )
 
+    _save_thesis(
+        symbol=str(row.get("symbol") or ""),
+        name=str(row.get("name") or ""),
+        method=method,
+        method_label=spec["label"],
+        target=target,
+        result=result,
+        required_margin=required_margin,
+        f=f,
+        price=price,
+    )
+
     _valuation_report(
         symbol=str(row.get("symbol") or ""),
         name=str(row.get("name") or ""),
@@ -352,6 +365,36 @@ def _valuation_lab(row: pd.Series, f: Dict[str, Any]) -> None:
         net_debt=net_debt,
         as_of=shared.last_market_date(table),
     )
+
+
+def _save_thesis(symbol: str, name: str, method: str, method_label: str, target: float,
+                 result: Dict[str, Any], required_margin: float, f: Dict[str, Any],
+                 price: Optional[float]) -> None:
+    """Persiste la valorisation courante comme thèse de surveillance."""
+    with st.expander("💾 Enregistrer cette hypothèse pour la surveiller", expanded=False):
+        st.caption(
+            "La thèse enregistrée garde le multiple cible, la marge de sécurité, la métrique de "
+            "référence, l'exercice comptable et la source. Elle sera recalculée automatiquement si "
+            "le BPA (ou l'EBITDA, les fonds propres, le dividende) change. Aucune notification push : "
+            "la surveillance est consultable dans « Surveiller »."
+        )
+        notes = st.text_input(
+            "Note personnelle (facultatif)",
+            key=f"thesis_note_{method}",
+            placeholder="Ex. hypothèse de stabilité du BPA, à revoir après les résultats S1.",
+        )
+        if st.button("📌 Enregistrer la thèse", key=f"thesis_save_{method}",
+                     use_container_width=True):
+            thesis = thesis_mod.build(
+                symbol=symbol, name=name, method=method, target=target, result=result,
+                required_margin=required_margin, f=f, price=price, method_label=method_label,
+            )
+            thesis["notes"] = notes
+            saved = thesis_mod.save(thesis)
+            st.success(
+                f"Thèse enregistrée pour {saved['symbol']} — cible {thesis_mod.METRIC_BY_METHOD.get(method, ('', '', ''))[1]} "
+                f"= {saved.get('target')}. Consultez « Surveiller » pour le suivi des conditions."
+            )
 
 
 def _valuation_report(symbol: str, name: str, spec: Dict[str, Any], f: Dict[str, Any],

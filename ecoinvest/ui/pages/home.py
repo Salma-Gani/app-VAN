@@ -196,24 +196,56 @@ def _pulse_html(indices: pd.DataFrame, regime: Dict[str, Any]) -> str:
 
 
 def _categories() -> None:
-    st.markdown('<div class="mm-section-label">Explorer la plateforme</div>', unsafe_allow_html=True)
+    st.markdown('<div class="mm-section-label">Le parcours MARKET MIND</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="mm-lede" style="margin-top:-6px">De l\'information à une hypothèse de '
+        'valorisation, puis au suivi de cette hypothèse. Le parcours relie cinq étapes autour '
+        'd\'une même valeur — chaque étape utilise le résultat de la précédente.</p>',
+        unsafe_allow_html=True,
+    )
     cards = [
-        ("dashboard", "🌍", "Vue globale du marché",
-         "Indices, cotations, tendances et actualités en un coup d'œil."),
-        ("screener", "📈", "Analyse technique",
-         "Prix, momentum, volatilité et signaux sur les 81 valeurs BVC."),
-        ("fundamentals_page", "🧾", "Analyse fondamentale",
-         "Ratios, valorisation, cash-flows et couverture des données."),
-        ("profile_page", "👤", "Mon patrimoine",
-         "Revenus, actifs, dettes, profil de risque et portefeuille."),
-        ("ai_page", "🧠", "Market Mind AI",
-         "Analyse directe, scénarios, sources, rapport PDF et alertes explicables."),
-        ("portfolio_builder", "⚖️", "Comparateur d'investissements",
-         "Comparez votre portefeuille à des alternatives, coûts inclus."),
+        ("company", "🌍", "1 · Comprendre",
+         "Cours, actualité, contexte macro et analyse de la société."),
+        ("statements_page", "🧾", "2 · Analyser",
+         "États financiers (bilan, CPC, trésorerie), ratios et comparables."),
+        ("valuation", "🧮", "3 · Valoriser",
+         "Prix théorique, scénarios, marge de sécurité et thèse enregistrée."),
+        ("alerts_page", "🔔", "4 · Surveiller",
+         "Alertes de prix et de mise à jour des résultats, thèses actives."),
+        ("portfolio_builder", "💼", "5 · Relier au portefeuille",
+         "Exposition, concentration et simulation des effets possibles."),
     ]
-    for start in range(0, len(cards), 3):
+    cols = st.columns(5, gap="medium")
+    for col, (key, icon, title, desc) in zip(cols, cards):
+        with col:
+            with st.container(border=True):
+                st.markdown(
+                    f'<div class="mm-cat-icon">{icon}</div>'
+                    f'<div class="mm-cat-title">{_esc(title)}</div>'
+                    f'<div class="mm-cat-desc">{_esc(desc)}</div>',
+                    unsafe_allow_html=True,
+                )
+                if st.button("Ouvrir →", key=f"home_card_{key}", use_container_width=True):
+                    _goto(key)
+    st.write("")
+    st.markdown('<div class="mm-section-label">Explorer librement</div>', unsafe_allow_html=True)
+    extras = [
+        ("dashboard", "📊", "Vue globale du marché",
+         "Indices, cotisations et tendances de la séance."),
+        ("screener", "📈", "Screener & technique",
+         "Prix, momentum, volatilité et signaux sur les valeurs BVC."),
+        ("fundamentals_page", "🧮", "Données fondamentales",
+         "Saisie, import et couverture des données comptables."),
+        ("ai_page", "🧠", "Market Mind AI",
+         "Analyse directe sourcée, briefing et rapport PDF."),
+        ("profile_page", "👤", "Mon patrimoine",
+         "Revenus, actifs, dettes, profil de risque."),
+        ("sources_page", "📚", "Sources & méthodologie",
+         "Statut des données, licences et limites."),
+    ]
+    for start in range(0, len(extras), 3):
         cols = st.columns(3, gap="medium")
-        for col, (key, icon, title, desc) in zip(cols, cards[start:start + 3]):
+        for col, (key, icon, title, desc) in zip(cols, extras[start:start + 3]):
             with col:
                 with st.container(border=True):
                     st.markdown(

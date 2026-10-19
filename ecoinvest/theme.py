@@ -257,6 +257,25 @@ def inject_css() -> None:
         .mm-cat-title {{ font-weight: 700; font-size: 1rem; margin-bottom: 4px; color: {c['text']}; }}
         .mm-cat-desc {{ font-size: .82rem; line-height: 1.5; color: {c['muted']}; min-height: 3.1em; }}
 
+        .mm-steps {{
+            display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 18px;
+        }}
+        .mm-step {{
+            display: flex; align-items: center; gap: 8px; padding: 9px 14px;
+            border: 1px solid {c['border']}; border-radius: 999px;
+            background: {c['surface']}; color: {c['muted']}; font-size: .86rem;
+        }}
+        .mm-step-active {{
+            border-color: {c['primary']}; color: {c['text']};
+            box-shadow: 0 6px 18px rgba(15,118,110,0.12);
+        }}
+        .mm-step-num {{
+            width: 22px; height: 22px; border-radius: 50%; display: inline-flex;
+            align-items: center; justify-content: center; font-size: .74rem; font-weight: 700;
+            background: rgba(15,118,110,0.12); color: {c['primary']};
+        }}
+        .mm-step-ico {{ font-size: .95rem; }}
+
         .mm-ticker {{
             display: flex; gap: 0; overflow: hidden; border: 1px solid {c['border']};
             border-radius: 12px; background: {c['surface']};

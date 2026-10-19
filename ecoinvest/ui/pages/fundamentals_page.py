@@ -29,15 +29,25 @@ def render() -> None:
 
     ui.hero(
         "Données fondamentales",
-        "Renseignez les états financiers des sociétés cotées : les ratios, la valorisation DCF et "
-        "les signaux fondamentaux sont calculés automatiquement.",
+        "Renseignez ou ajustez les états financiers des sociétés cotées. Les données proviennent "
+        "d'abord de la page « États financiers » (AMMC, API, import) ; vos saisies ici restent "
+        "prioritaires.",
         badge=ui.badge(f"{filled} / {len(coverage)} sociétés couvertes", "info"),
     )
 
     ui.source_note(
-        ["Bourse de Casablanca (nombre de titres, dividende)", "Saisie / import utilisateur"],
+        ["États financiers (AMMC, API, import vérifié)", "Bourse de Casablanca (nombre de titres, dividende)",
+         "Saisie / import utilisateur"],
         detail="Les champs non renseignés restent vides : aucune estimation, aucune extrapolation.",
     )
+
+    pages = st.session_state.get("_nav_pages") or {}
+    if "statements_page" in pages:
+        st.page_link(
+            pages["statements_page"],
+            label="🧾 Voir les états financiers sourcés (bilan, compte de résultat, trésorerie)",
+            icon="🧾",
+        )
 
     ui.kpi_row(
         [

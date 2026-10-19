@@ -9,6 +9,7 @@ from . import (
     dashboard,
     fundamentals_page,
     news_page,
+    parcours_page,
     portfolio_builder,
     profile_page,
     projects,
@@ -16,6 +17,7 @@ from . import (
     shared,
     sources_page,
     simulator,
+    statements_page,
     valuation,
 )
 
@@ -33,5 +35,7 @@ __all__ = [
     "alerts_page",
     "sources_page",
     "fundamentals_page",
+    "statements_page",
+    "parcours_page",
     "projects",
 ]

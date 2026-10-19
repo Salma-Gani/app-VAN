@@ -1,0 +1,669 @@
+{
+ "schema": 1,
+ "generated_at": "2026-10-19",
+ "note": "États financiers vérifiés des sociétés cotées marocaines, repris des rapports financiers annuels publiés par l'AMMC. Comptes sociaux. Chaque valeur est rattachée à l'URL du document d'origine.",
+ "companies": {
+  "TMA": [
+   {
+    "symbol": "TMA",
+    "issuer": "TOTALENERGIES MARKETING MAROC",
+    "period": "FY",
+    "fiscal_year": 2024,
+    "period_end": "2024-12-31",
+    "currency": "MAD",
+    "unit": "MAD",
+    "consolidated": false,
+    "source": "AMMC — Rapport financier annuel 2024 (comptes sociaux)",
+    "source_url": "https://www.ammc.ma/sites/default/files/Total_RFA_2024_0.pdf",
+    "as_of": "2025-05-15",
+    "status": "official",
+    "provider": "AMMC",
+    "income": {
+     "revenue": 18348026022.08,
+     "operating_income": 1332671876.68,
+     "ebitda": 1649117943.79,
+     "interest_expense": 64625676.31,
+     "taxes": 466189051.0,
+     "net_income": 844618182.5,
+     "eps": 94.2654
+    },
+    "balance": {
+     "non_current_assets": 2567798676.05,
+     "current_assets": 3852552805.75,
+     "inventory": 1170251124.84,
+     "receivables": 2053288629.23,
+     "cash": 1402976634.4,
+     "total_assets": 7823328116.2,
+     "equity": 2595923623.32,
+     "total_debt": 697106199.43,
+     "current_liabilities": 4428377364.27,
+     "shares": 8960000
+    },
+    "cashflow": {
+     "operating_cf": 1150009167.83,
+     "capex": 198879934.6,
+     "free_cash_flow": 951129233.23,
+     "dividends_paid": 501760000.0
+    },
+    "lines": {
+     "income": [
+      {
+       "label": "Ventes de marchandises (en l'état)",
+       "value": 18194103791.28,
+       "prior": 17836008058.29
+      },
+      {
+       "label": "Ventes de biens et services produits",
+       "value": 153922230.8,
+       "prior": 148190939.88
+      },
+      {
+       "label": "Chiffres d'affaires",
+       "value": 18348026022.08,
+       "prior": 17984198998.17
+      },
+      {
+       "label": "Total des produits d'exploitation",
+       "value": 20909935556.16,
+       "prior": 20946422239.51
+      },
+      {
+       "label": "Total des charges d'exploitation",
+       "value": 19577263679.48,
+       "prior": 20016613502.84
+      },
+      {
+       "label": "Résultat d'exploitation (EBIT)",
+       "value": 1332671876.68,
+       "prior": 929808736.67
+      },
+      {
+       "label": "Résultat financier",
+       "value": 34500952.39,
+       "prior": -12669641.01
+      },
+      {
+       "label": "Résultat courant",
+       "value": 1367172829.07,
+       "prior": 917139095.66
+      },
+      {
+       "label": "Résultat non courant",
+       "value": -56365595.57,
+       "prior": -538965543.95
+      },
+      {
+       "label": "Impôts sur les résultats",
+       "value": 466189051.0,
+       "prior": 319427172.0
+      },
+      {
+       "label": "Résultat net de l'exercice",
+       "value": 844618182.5,
+       "prior": 58746379.71
+      },
+      {
+       "label": "Excédent brut d'exploitation (EBE)",
+       "value": 1649117943.79,
+       "prior": 1241889210.05
+      },
+      {
+       "label": "Capacité d'autofinancement (CAF)",
+       "value": 1150009167.83,
+       "prior": 348551134.63
+      }
+     ],
+     "balance_assets": [
+      {
+       "label": "Immobilisations en non valeurs [A]",
+       "value": 52273999.98,
+       "prior": 69617999.98
+      },
+      {
+       "label": "Immobilisations incorporelles [B]",
+       "value": 90711295.31,
+       "prior": 91143642.66
+      },
+      {
+       "label": "Immobilisations corporelles [C]",
+       "value": 2214812884.4,
+       "prior": 2292973337.45
+      },
+      {
+       "label": "Immobilisations financières [D]",
+       "value": 210000496.36,
+       "prior": 213283084.09
+      },
+      {
+       "label": "Total I — Actif immobilisé",
+       "value": 2567798676.05,
+       "prior": 2667018064.18
+      },
+      {
+       "label": "Stocks [F]",
+       "value": 1170251124.84,
+       "prior": 1994494728.33
+      },
+      {
+       "label": "Créances de l'actif circulant [G]",
+       "value": 2679738130.16,
+       "prior": 2830447804.06
+      },
+      {
+       "label": "Total II — Actif circulant",
+       "value": 3852552805.75,
+       "prior": 4833271464.48
+      },
+      {
+       "label": "Trésorerie-actif (Banques, TG et CCP)",
+       "value": 1402976634.4,
+       "prior": 1284726913.54
+      },
+      {
+       "label": "Total général de l'actif",
+       "value": 7823328116.2,
+       "prior": 8785016442.2
+      }
+     ],
+     "balance_liabilities": [
+      {
+       "label": "Capitaux propres (A)",
+       "value": 2595923623.32,
+       "prior": 2253065440.82
+      },
+      {
+       "label": "Dettes de financement (C)",
+       "value": 697106199.43,
+       "prior": 737390238.56
+      },
+      {
+       "label": "Provisions durables pour risques et charges (D)",
+       "value": 101920929.18,
+       "prior": 98072141.78
+      },
+      {
+       "label": "Total I — Financement permanent",
+       "value": 3394950751.93,
+       "prior": 3088527821.16
+      },
+      {
+       "label": "Dettes du passif circulant (F)",
+       "value": 4402837051.51,
+       "prior": 5684689612.61
+      },
+      {
+       "label": "Autres provisions et écarts de conversion",
+       "value": 25540312.76,
+       "prior": 11799008.43
+      },
+      {
+       "label": "Total II — Passif circulant",
+       "value": 4428377364.27,
+       "prior": 5696488621.04
+      },
+      {
+       "label": "Trésorerie-passif",
+       "value": 0.0,
+       "prior": 0.0
+      },
+      {
+       "label": "Total général du passif",
+       "value": 7823328116.2,
+       "prior": 8785016442.2
+      }
+     ],
+     "cashflow": [
+      {
+       "label": "Capacité d'autofinancement (CAF)",
+       "value": 1150009167.83,
+       "prior": 348551134.63
+      },
+      {
+       "label": "Distributions de bénéfices",
+       "value": 501760000.0,
+       "prior": 501760000.0
+      },
+      {
+       "label": "Acquisitions et augmentations d'immobilisations",
+       "value": 198879934.6,
+       "prior": 369824885.56
+      },
+      {
+       "label": "Free Cash-Flow (CAF − Capex)",
+       "value": 951129233.23,
+       "prior": -21273750.93
+      },
+      {
+       "label": "Trésorerie nette (actif − passif)",
+       "value": 1402976634.4,
+       "prior": 1284726913.54
+      }
+     ]
+    }
+   },
+   {
+    "symbol": "TMA",
+    "issuer": "TOTALENERGIES MARKETING MAROC",
+    "period": "FY",
+    "fiscal_year": 2023,
+    "period_end": "2023-12-31",
+    "currency": "MAD",
+    "unit": "MAD",
+    "consolidated": false,
+    "source": "AMMC — Rapport financier annuel 2024 (comptes sociaux, comparatif 2023)",
+    "source_url": "https://www.ammc.ma/sites/default/files/Total_RFA_2024_0.pdf",
+    "as_of": "2025-05-15",
+    "status": "official",
+    "provider": "AMMC",
+    "income": {
+     "revenue": 17984198998.17,
+     "operating_income": 929808736.67,
+     "ebitda": 1241889210.05,
+     "interest_expense": 81073607.48,
+     "taxes": 319427172.0,
+     "net_income": 58746379.71,
+     "eps": 6.5565
+    },
+    "balance": {
+     "non_current_assets": 2667018064.18,
+     "current_assets": 4833271464.48,
+     "inventory": 1994494728.33,
+     "receivables": 1926913026.43,
+     "cash": 1284726913.54,
+     "total_assets": 8785016442.2,
+     "equity": 2253065440.82,
+     "total_debt": 737390238.56,
+     "current_liabilities": 5696488621.04,
+     "shares": 8960000
+    },
+    "cashflow": {
+     "operating_cf": 348551134.63,
+     "capex": 369824885.56,
+     "free_cash_flow": -21273750.93,
+     "dividends_paid": 501760000.0
+    },
+    "lines": {
+     "income": [
+      {
+       "label": "Ventes de marchandises (en l'état)",
+       "value": 18194103791.28,
+       "prior": null
+      },
+      {
+       "label": "Ventes de biens et services produits",
+       "value": 153922230.8,
+       "prior": null
+      },
+      {
+       "label": "Chiffres d'affaires",
+       "value": 18348026022.08,
+       "prior": null
+      },
+      {
+       "label": "Total des produits d'exploitation",
+       "value": 20909935556.16,
+       "prior": null
+      },
+      {
+       "label": "Total des charges d'exploitation",
+       "value": 19577263679.48,
+       "prior": null
+      },
+      {
+       "label": "Résultat d'exploitation (EBIT)",
+       "value": 1332671876.68,
+       "prior": null
+      },
+      {
+       "label": "Résultat financier",
+       "value": 34500952.39,
+       "prior": null
+      },
+      {
+       "label": "Résultat courant",
+       "value": 1367172829.07,
+       "prior": null
+      },
+      {
+       "label": "Résultat non courant",
+       "value": -56365595.57,
+       "prior": null
+      },
+      {
+       "label": "Impôts sur les résultats",
+       "value": 466189051.0,
+       "prior": null
+      },
+      {
+       "label": "Résultat net de l'exercice",
+       "value": 844618182.5,
+       "prior": null
+      },
+      {
+       "label": "Excédent brut d'exploitation (EBE)",
+       "value": 1649117943.79,
+       "prior": null
+      },
+      {
+       "label": "Capacité d'autofinancement (CAF)",
+       "value": 1150009167.83,
+       "prior": null
+      }
+     ],
+     "balance_assets": [
+      {
+       "label": "Immobilisations en non valeurs [A]",
+       "value": 52273999.98,
+       "prior": null
+      },
+      {
+       "label": "Immobilisations incorporelles [B]",
+       "value": 90711295.31,
+       "prior": null
+      },
+      {
+       "label": "Immobilisations corporelles [C]",
+       "value": 2214812884.4,
+       "prior": null
+      },
+      {
+       "label": "Immobilisations financières [D]",
+       "value": 210000496.36,
+       "prior": null
+      },
+      {
+       "label": "Total I — Actif immobilisé",
+       "value": 2567798676.05,
+       "prior": null
+      },
+      {
+       "label": "Stocks [F]",
+       "value": 1170251124.84,
+       "prior": null
+      },
+      {
+       "label": "Créances de l'actif circulant [G]",
+       "value": 2679738130.16,
+       "prior": null
+      },
+      {
+       "label": "Total II — Actif circulant",
+       "value": 3852552805.75,
+       "prior": null
+      },
+      {
+       "label": "Trésorerie-actif (Banques, TG et CCP)",
+       "value": 1402976634.4,
+       "prior": null
+      },
+      {
+       "label": "Total général de l'actif",
+       "value": 7823328116.2,
+       "prior": null
+      }
+     ],
+     "balance_liabilities": [
+      {
+       "label": "Capitaux propres (A)",
+       "value": 2595923623.32,
+       "prior": null
+      },
+      {
+       "label": "Dettes de financement (C)",
+       "value": 697106199.43,
+       "prior": null
+      },
+      {
+       "label": "Provisions durables pour risques et charges (D)",
+       "value": 101920929.18,
+       "prior": null
+      },
+      {
+       "label": "Total I — Financement permanent",
+       "value": 3394950751.93,
+       "prior": null
+      },
+      {
+       "label": "Dettes du passif circulant (F)",
+       "value": 4402837051.51,
+       "prior": null
+      },
+      {
+       "label": "Autres provisions et écarts de conversion",
+       "value": 25540312.76,
+       "prior": null
+      },
+      {
+       "label": "Total II — Passif circulant",
+       "value": 4428377364.27,
+       "prior": null
+      },
+      {
+       "label": "Trésorerie-passif",
+       "value": 0.0,
+       "prior": null
+      },
+      {
+       "label": "Total général du passif",
+       "value": 7823328116.2,
+       "prior": null
+      }
+     ],
+     "cashflow": [
+      {
+       "label": "Capacité d'autofinancement (CAF)",
+       "value": 1150009167.83,
+       "prior": null
+      },
+      {
+       "label": "Distributions de bénéfices",
+       "value": 501760000.0,
+       "prior": null
+      },
+      {
+       "label": "Acquisitions et augmentations d'immobilisations",
+       "value": 198879934.6,
+       "prior": null
+      },
+      {
+       "label": "Free Cash-Flow (CAF − Capex)",
+       "value": 951129233.23,
+       "prior": null
+      },
+      {
+       "label": "Trésorerie nette (actif − passif)",
+       "value": 1402976634.4,
+       "prior": null
+      }
+     ]
+    }
+   }
+  ],
+  "MOX": [
+   {
+    "symbol": "MOX",
+    "issuer": "MAGHREB OXYGENE",
+    "period": "FY",
+    "fiscal_year": 2024,
+    "period_end": "2024-12-31",
+    "currency": "MAD",
+    "unit": "MAD",
+    "consolidated": false,
+    "source": "AMMC — Rapport financier annuel 2024 (comptes sociaux)",
+    "source_url": "https://www.ammc.ma/sites/default/files/MOX_RFA_2024.pdf",
+    "as_of": "2025-02-06",
+    "status": "official",
+    "provider": "AMMC",
+    "income": {
+     "revenue": 317249809.36,
+     "operating_income": 5530488.41,
+     "ebitda": 26611249.68,
+     "net_income": 8009743.48,
+     "eps": 9.8581
+    },
+    "balance": {
+     "non_current_assets": 233816688.83,
+     "current_assets": 229479500.51,
+     "inventory": 48332196.88,
+     "receivables": 181097466.3,
+     "cash": 17452465.21,
+     "total_assets": 480748654.55,
+     "equity": 255779099.62,
+     "total_debt": 127457802.91,
+     "current_liabilities": 87381310.31,
+     "shares": 812500
+    },
+    "cashflow": {
+     "operating_cf": 31231141.65,
+     "capex": 15677069.93,
+     "free_cash_flow": 15554071.72
+    },
+    "lines": {
+     "income": [
+      {
+       "label": "Ventes de marchandises (en l'état)",
+       "value": 174917051.97,
+       "prior": null
+      },
+      {
+       "label": "Ventes de biens et services produits",
+       "value": 142332757.39,
+       "prior": null
+      },
+      {
+       "label": "Chiffre d'affaires",
+       "value": 317249809.36,
+       "prior": 295628358.33
+      },
+      {
+       "label": "Total des produits d'exploitation",
+       "value": 335921594.23,
+       "prior": 296761838.61
+      },
+      {
+       "label": "Total des charges d'exploitation",
+       "value": 330391105.82,
+       "prior": 289759380.8
+      },
+      {
+       "label": "Résultat d'exploitation (EBIT)",
+       "value": 5530488.41,
+       "prior": 7002457.81
+      },
+      {
+       "label": "Résultat net",
+       "value": 8009743.48,
+       "prior": 8438357.63
+      },
+      {
+       "label": "Excédent brut d'exploitation (EBE)",
+       "value": 26611249.68,
+       "prior": 28797394.47
+      },
+      {
+       "label": "Capacité d'autofinancement (CAF)",
+       "value": 31231141.65,
+       "prior": 30747518.91
+      }
+     ],
+     "balance_assets": [
+      {
+       "label": "Immobilisations incorporelles [B]",
+       "value": 1651372.08,
+       "prior": null
+      },
+      {
+       "label": "Immobilisations corporelles [C]",
+       "value": 197958029.66,
+       "prior": 203910938.61
+      },
+      {
+       "label": "Immobilisations financières [D]",
+       "value": 31370097.69,
+       "prior": 31370097.69
+      },
+      {
+       "label": "Total I — Actif immobilisé",
+       "value": 233816688.83,
+       "prior": 241045054.6
+      },
+      {
+       "label": "Stocks [F]",
+       "value": 48332196.88,
+       "prior": 45358280.1
+      },
+      {
+       "label": "Créances de l'actif circulant [G]",
+       "value": 181097466.3,
+       "prior": 159530233.96
+      },
+      {
+       "label": "Total II — Actif circulant",
+       "value": 229479500.51,
+       "prior": 204930874.1
+      },
+      {
+       "label": "Trésorerie-actif",
+       "value": 17452465.21,
+       "prior": 20848376.8
+      },
+      {
+       "label": "Total général de l'actif",
+       "value": 480748654.55,
+       "prior": 466824305.5
+      }
+     ],
+     "balance_liabilities": [
+      {
+       "label": "Total des capitaux propres (A)",
+       "value": 255779099.62,
+       "prior": 251019356.14
+      },
+      {
+       "label": "Dettes de financement (C)",
+       "value": 127457802.91,
+       "prior": 133610000.0
+      },
+      {
+       "label": "Passif circulant",
+       "value": 87381310.31,
+       "prior": null
+      },
+      {
+       "label": "Trésorerie-passif",
+       "value": 0.0,
+       "prior": null
+      },
+      {
+       "label": "Total général du passif",
+       "value": 480748654.55,
+       "prior": 466824305.5
+      }
+     ],
+     "cashflow": [
+      {
+       "label": "Capacité d'autofinancement (CAF)",
+       "value": 31231141.65,
+       "prior": 30747518.91
+      },
+      {
+       "label": "Acquisitions et augmentations d'immobilisations",
+       "value": 15677069.93,
+       "prior": 27227303.63
+      },
+      {
+       "label": "Free Cash-Flow (CAF − Capex)",
+       "value": 15554071.72,
+       "prior": 3520215.28
+      },
+      {
+       "label": "Trésorerie nette (actif − passif)",
+       "value": 7322023.5,
+       "prior": 20848376.8
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

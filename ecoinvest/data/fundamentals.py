@@ -174,8 +174,24 @@ def template_csv() -> str:
 # ═══════════════════════════ Construction d'un dossier ═══════════════════════════
 
 def get_record(symbol: str) -> Dict[str, Any]:
-    """Fiche fondamentale brute d'une valeur (sans enrichissement marché)."""
-    return dict(load_store().get(symbol.strip().upper(), {}))
+    """Fiche fondamentale brute d'une valeur (sans enrichissement marché).
+
+    Les états financiers vérifiés/importés servent de base ; une saisie manuelle
+    de l'utilisateur reste toujours prioritaire (elle est fusionnée par-dessus).
+    """
+    symbol = symbol.strip().upper()
+    manual = dict(load_store().get(symbol, {}))
+    try:
+        from . import statements
+
+        derived = statements.fundamentals_for(symbol)
+    except Exception:
+        derived = {}
+    if not derived:
+        return manual
+    merged = dict(derived)
+    merged.update(manual)
+    return merged
 
 
 def market_reference(force: bool = False) -> Dict[str, Dict[str, Any]]:
@@ -250,9 +266,17 @@ def get_fundamentals(symbol: str, market_row: Optional[pd.Series] = None) -> Dic
     out["price"] = price
     bvc_data = bool(as_float(ref.get("shares")) is not None or as_float(ref.get("dps")) is not None)
     out["_bvc"] = bvc_data
-    if rec and bvc_data:
+    manual = bool(load_store().get(symbol))
+    has_statement = bool(rec.get("statement_source"))
+    if has_statement and manual:
+        out["_source"] = "états financiers + saisie utilisateur"
+    elif has_statement and bvc_data:
+        out["_source"] = "états financiers (source documentée) + référentiel BVC"
+    elif has_statement:
+        out["_source"] = "états financiers (source documentée)"
+    elif manual and bvc_data:
         out["_source"] = "saisie + référentiel BVC"
-    elif rec:
+    elif manual:
         out["_source"] = "saisie/import"
     elif bvc_data:
         out["_source"] = "BVC (titres, dividende)"
@@ -583,15 +607,15 @@ def sector_median_ratios(sector: str, market_df: pd.DataFrame, ratio_key: str) -
 def coverage_report(market_df: pd.DataFrame) -> pd.DataFrame:
     """Taux de complétion des données fondamentales, par valeur.
 
-    Compte les champs saisis par l'utilisateur **et** les deux champs récupérés
-    automatiquement depuis la BVC (nombre de titres et dividende par action).
+    Compte les champs issus des états financiers (vérifiés, importés ou via API),
+    des saisies utilisateur **et** les deux champs récupérés automatiquement
+    depuis la BVC (nombre de titres et dividende par action).
     """
-    store = load_store()
     refs = market_reference()
     rows = []
     for _, row in market_df.iterrows():
         symbol = str(row["symbol"])
-        rec = store.get(symbol, {}) or {}
+        rec = get_record(symbol)
         ref = refs.get(symbol, {}) or {}
         filled = 0
         for key in NUMERIC_FIELDS:
@@ -600,6 +624,9 @@ def coverage_report(market_df: pd.DataFrame) -> pd.DataFrame:
             elif key in ("shares", "dps") and ref.get(key) not in (None, ""):
                 filled += 1
         loaded_from_bvc = (ref.get("shares") is not None) or (ref.get("dps") is not None)
+        source = rec.get("statement_source") or rec.get("source")
+        if not source and loaded_from_bvc:
+            source = "BVC (titres, dividende)"
         rows.append(
             {
                 "Symbole": symbol,
@@ -607,7 +634,7 @@ def coverage_report(market_df: pd.DataFrame) -> pd.DataFrame:
                 "Secteur": row.get("sector"),
                 "Champs renseignés": filled,
                 "% complétion": filled / max(len(NUMERIC_FIELDS), 1),
-                "Source": rec.get("source") or ("BVC (titres, dividende)" if loaded_from_bvc else "—"),
+                "Source": source or "—",
                 "Mise à jour": rec.get("as_of") or (
                     f"dividende {ref.get('dps_year')}" if ref.get("dps_year") else "—"
                 ),

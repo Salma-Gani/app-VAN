@@ -9,7 +9,7 @@ APP_NAME = "MARKET MIND"
 APP_TAGLINE = "Investment intelligence platform"
 APP_SUBTITLE = "Votre capital. Votre stratégie. Une vision plus claire."
 APP_ICON = "🧭"
-VERSION = "3.1.0"
+VERSION = "3.2.0"
 
 # ═══════════════════════════ Chemins ═══════════════════════════
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,8 +25,11 @@ CACHE_FILE = CACHE_DIR / "ecoinvest_cache.sqlite"
 USER_PROFILE_FILE = USER_DIR / "investor_profile.json"
 USER_ALLOCATION_FILE = USER_DIR / "allocations.json"
 USER_FUNDAMENTALS_FILE = USER_DIR / "fundamentals_overrides.json"
+USER_STATEMENTS_FILE = USER_DIR / "statements.json"
+USER_THESES_FILE = USER_DIR / "theses.json"
 USER_AI_FILE = USER_DIR / "ai_config.json"
 WATCHLIST_FILE = USER_DIR / "watchlist.json"
+STATEMENTS_SEED = SEED_DIR / "bvc_statements.json"
 
 
 # ═══════════════════════════ Variables d'environnement ═══════════════════════════
@@ -83,6 +86,8 @@ TTL = {
     "fundamentals": 86400,  # 24 h
     "news": 900,           # 15 min
     "macro": 86400,        # 24 h — séries annuelles World Bank
+    "statements": 86400,   # 24 h — états financiers importés / API
+    "ammc": 86400,         # 24 h — liste publique des états financiers AMMC
 }
 
 # ═══════════════════════════ Palette (institutionnelle, fond clair) ═══════════════════════════
