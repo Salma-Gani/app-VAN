@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from . import forecast, risk, scoring, technical
+from . import backtest, forecast, risk, scoring, technical
 
-__all__ = ["technical", "risk", "scoring", "forecast"]
+__all__ = ["technical", "risk", "scoring", "forecast", "backtest"]

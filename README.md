@@ -118,7 +118,7 @@ Le script télécharge les indices, les 81 valeurs, les dividendes, le VIX, les 
 | 🧭 **Parcours d'analyse** | Les 5 étapes pour une valeur : statut de chaque étape, conditions de la thèse (prix d'entrée, mise à jour de la métrique), dossier de preuve (sources, dates, statuts) |
 | 🏠 **Vue globale du marché** | MASI, largeur de marché, VIX, sentiment des news, capitalisation ; graphique MASI 6 mois ; jauge VIX et décomposition du régime ; treemap sectorielle ; hausses/baisses et volumes ; nuage risque/rendement ; briefing IA à la demande ; marchés internationaux et macro |
 | 🔍 **Screener BVC** | Filtres complets, KPI de sélection, synthèse par secteur, tableau interactif (sélection d'une ligne → ouverture de la fiche société), export CSV, top opportunités |
-| 🏢 **Analyse société** | En-tête cours/secteur/signaux, KPI, onglets Synthèse / Technique / Fondamentaux / Actualités / Agent IA ; comparaison Base 100 vs MASI ; radar multifactoriel ; plan d'entrée |
+| 🏢 **Analyse société** | En-tête cours/secteur/signaux, KPI, onglets Synthèse / Technique / Fondamentaux / Actualités / **Backtest** / Agent IA ; comparaison Base 100 vs MASI ; radar multifactoriel ; plan d'entrée |
 | 🧾 **États financiers** | Compte de résultat, bilan (actif/passif) et trésorerie par exercice, avec source, devise, unité et statut ; import API (EODHD, FMP, Yahoo), CSV vérifié, documents officiels AMMC, couverture par société |
 | 📰 **Actualités & sentiment** | Sentiment 7 jours, sentiment sectoriel, répartition par source, filtres (recherche, source, tonalité, fenêtre), cartes d'articles cliquables |
 | 🧮 **Valorisation & thèses** | **Valuation Lab** en tête de page (PER cible × BPA, EV/EBITDA, EV/EBIT, P/B, P/S, rendement exigé, marge de sécurité, prix d'entrée, sensibilité), **enregistrement d'une thèse**, puis DCF complet, hypothèses ajustables, projection des FCF, scénarios, Monte-Carlo et comparaison sectorielle |
@@ -371,6 +371,6 @@ Le coût des fonds propres du DCF est estimé par le CAPM : taux sans risque + b
 - Les **alertes sont locales et calculées à la demande** : aucun e-mail, SMS ou push n'est envoyé. Une alerte de support/RSI n'est pas un ordre.
 - La macro Maroc est **annuelle et différée** (World Bank) ; elle ne remplace pas les publications trimestrielles du HCP ni les taux de Bank Al-Maghrib.
 - Le **VIX** mesure la volatilité implicite des options sur le S&P 500 ; il n'est pas une mesure directe de la volatilité du MASI.
-- Le **backtesting** avec coûts de transaction et validation hors échantillon n'est pas encore intégré ; les simulations Monte-Carlo ne constituent pas un backtest.
+- Le **backtest** (onglet « Backtest » de la fiche société) inclut les coûts de transaction, évite toute anticipation (*no look-ahead*) et propose une **validation hors échantillon**. Il reste **illustratif** : historique court (≈1 an de séances BVC), pas de fiscalité, pas de frais de conservation, pas de contrainte de liquidité. Il ne garantit aucune performance future.
 - Les frais réels (courtage, conservation, taxes) varient selon l'intermédiaire ; les hypothèses sont affichées dans les simulations.
 - **Cette application est un outil d'analyse et de simulation. Elle ne constitue pas un conseil en investissement.** Les décisions restent sous la responsabilité de l'utilisateur.

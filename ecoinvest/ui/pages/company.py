@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import streamlit as st
 
-from ...analytics import technical
+from ...analytics import backtest, technical
 from ...config import COLORS
 from ...data import fundamentals, news
 from ...utils.formatting import fmt_money, fmt_multiple, fmt_num, fmt_pct
@@ -46,7 +46,8 @@ def render() -> None:
     )
 
     tabs = st.tabs(
-        ["🧭 Synthèse", "📈 Technique", "📊 Fondamentaux & ratios", "📰 Actualités", "🤖 Agent IA"]
+        ["🧭 Synthèse", "📈 Technique", "📊 Fondamentaux & ratios", "📰 Actualités",
+         "🔬 Backtest", "🤖 Agent IA"]
     )
     with tabs[0]:
         _overview(row, enriched, summary)
@@ -57,6 +58,8 @@ def render() -> None:
     with tabs[3]:
         _news(row, symbol)
     with tabs[4]:
+        _backtest(hist, symbol)
+    with tabs[5]:
         _agent(symbol)
 
     ui.disclaimer()
@@ -478,6 +481,136 @@ def _news_card(item: pd.Series) -> None:
 
 
 # ═══════════════════════════ Onglet Agent IA ═══════════════════════════
+
+
+def _backtest(hist: pd.DataFrame, symbol: str) -> None:
+    ui.section(
+        "Backtest d'une règle simple",
+        "Une stratégie mécanique appliquée à l'historique réel des cours, frais de transaction inclus.",
+    )
+    if hist is None or hist.empty or "close" not in hist.columns:
+        ui.note("Historique de prix indisponible pour cette valeur.", "warn", "📉")
+        return
+
+    frame = hist.dropna(subset=["close"]).copy()
+    prices = pd.Series(frame["close"].to_numpy(dtype=float),
+                       index=pd.to_datetime(frame["date"])).sort_index()
+    prices = prices[prices > 0]
+
+    ui.note(
+        "**Méthode honnête.** Un signal calculé en clôture n'agit que le lendemain (aucune "
+        "anticipation). Chaque aller-retour paie des frais. Les paramètres sont choisis sur une "
+        "première période puis testés **hors échantillon**, une seule fois. Un backtest ne prédit "
+        "rien : il montre seulement ce qu'une règle aurait donné sur le passé.",
+        "info", "🔬",
+    )
+
+    strategy_keys = list(backtest.STRATEGIES)
+    columns = st.columns(len(backtest.STRATEGIES["ma_cross"]["params"]) + 3)
+    with columns[0]:
+        strategy = st.selectbox(
+            "Stratégie", strategy_keys,
+            format_func=lambda key: backtest.STRATEGIES[key]["label"], key="bt_strategy",
+        )
+    meta = backtest.STRATEGIES[strategy]
+    params: Dict[str, Any] = {}
+    for i, (name, label, default) in enumerate(meta["params"]):
+        with columns[i + 1]:
+            params[name] = st.number_input(
+                label, value=float(default), min_value=1.0, step=1.0, key=f"bt_{strategy}_{name}"
+            )
+    with columns[-2]:
+        cost_bps = st.number_input("Frais A/R (pb)", value=20.0, min_value=0.0, step=5.0,
+                                   key="bt_cost", help="Courtage et taxes, en points de base, facturés à l'aller et au retour.")
+    with columns[-1]:
+        slippage_bps = st.number_input("Slippage (pb)", value=0.0, min_value=0.0, step=5.0,
+                                       key="bt_slip")
+
+    signals = backtest._strategy_signals(strategy, prices, params)
+    result = backtest.run(prices, signals, cost_bps=cost_bps, slippage_bps=slippage_bps)
+    if not result["available"]:
+        ui.note(result["reason"], "warn", "📉")
+        return
+
+    metrics, market = result["metrics"], result["buy_hold"]
+    tone = "up" if (metrics["total_return"] or 0) >= 0 else "down"
+    ui.kpi_row(
+        [
+            {"label": "Stratégie", "value": fmt_pct(metrics["total_return"], 1),
+             "sub": f"{metrics['entries']} entrée(s)", "tone": tone},
+            {"label": "Achat-conservation", "value": fmt_pct(market["total_return"], 1),
+             "sub": "même période", "tone": "blue"},
+            {"label": "Sharpe", "value": fmt_num(metrics["sharpe"], 2),
+             "sub": "annualisé, hors taux sans risque", "tone": "info"},
+            {"label": "Drawdown max", "value": fmt_pct(metrics["max_drawdown"], 1),
+             "sub": "pire baisse", "tone": "warn"},
+            {"label": "Exposition", "value": fmt_pct(metrics["exposure"], 0),
+             "sub": "du temps investi", "tone": "info"},
+        ],
+        per_row=5,
+    )
+
+    curve = pd.DataFrame({
+        "Stratégie": result["equity"],
+        "Achat-conservation": result["buy_hold_equity"],
+    })
+    ui.plot(
+        charts.normalized_comparison(
+            {"Stratégie": result["equity"], "Achat-conservation": result["buy_hold_equity"]},
+            title=f"{symbol} — capital simulé (base 100), frais inclus", height=360,
+        ),
+        key=f"bt_curve_{symbol}",
+    )
+    ui.download_row(curve.reset_index().rename(columns={"index": "date"}),
+                    f"backtest_{symbol}.csv", "⬇️ Exporter la courbe (CSV)")
+
+    st.divider()
+    _walk_forward(symbol, prices, strategy, cost_bps, slippage_bps)
+
+
+def _walk_forward(symbol: str, prices: pd.Series, strategy: str,
+                  cost_bps: float, slippage_bps: float) -> None:
+    ui.section(
+        "Validation hors échantillon",
+        "Les paramètres sont choisis sur la première période et vérifiés une seule fois sur la seconde.",
+    )
+    train_frac = st.slider("Part d'apprentissage", 0.4, 0.8, 0.6, 0.05, key="bt_train")
+    wf = backtest.walk_forward(
+        prices, strategy, train_frac=train_frac, cost_bps=cost_bps, slippage_bps=slippage_bps
+    )
+    if not wf["available"]:
+        ui.note(wf["reason"], "warn", "📉")
+        return
+
+    params = wf["best_params"]
+    pretty = " · ".join(f"{key} = {value:.0f}" for key, value in params.items())
+    st.caption(f"Paramètres retenus sur l'apprentissage : **{pretty}** "
+               f"({wf['strategy_label']}).")
+    oos, ins = wf["out_of_sample"], wf["in_sample"]
+    cols = st.columns(2)
+    for col, label, block in ((cols[0], "Apprentissage", ins), (cols[1], "Hors échantillon", oos)):
+        with col:
+            st.markdown(f"**{label}**")
+            ui.kpi_row(
+                [
+                    {"label": "Rendement", "value": fmt_pct(block["total_return"], 1),
+                     "sub": f"{block['sessions']} séances",
+                     "tone": "up" if (block["total_return"] or 0) >= 0 else "down"},
+                    {"label": "Sharpe", "value": fmt_num(block["sharpe"], 2), "sub": "", "tone": "info"},
+                    {"label": "Drawdown", "value": fmt_pct(block["max_drawdown"], 1), "sub": "", "tone": "warn"},
+                ],
+                per_row=3,
+            )
+    drop = (ins["total_return"] is not None and oos["total_return"] is not None
+            and oos["total_return"] < ins["total_return"])
+    ui.note(
+        "**Lecture.** Un écart entre apprentissage et hors échantillon signale une règle fragile "
+        "(sur-ajustée). Les frais, le slippage et l'absence d'anticipation sont inclus ; la "
+        "fiscalité, les frais de conservation et la liquidité réelle ne le sont pas. "
+        + ("Ici la performance hors échantillon est **inférieure** : prudence." if drop
+           else "Ici la performance hors échantillon ne se dégrade pas franchement — cela ne garantit rien."),
+        "warn", "⚠️",
+    )
 
 
 def _agent(symbol: str) -> None:

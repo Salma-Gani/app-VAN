@@ -178,7 +178,9 @@ def _limits() -> None:
         "- **Aucun conseil personnalisé** : les scores, alertes et scénarios sont des lectures analytiques.\n"
         "- **Aucun prix garanti** : le prix théorique dépend de vos hypothèses et de la marge de sécurité.\n"
         "- **Aucune notification push/e-mail** : les alertes sont consultées localement dans l'application.\n"
-        "- **Pas encore de backtesting** avec coûts de transaction et validation hors échantillon.",
+        "- **Backtest illustratif disponible** (onglet « Backtest » de la fiche société) : coûts de "
+        "transaction inclus, aucune anticipation, validation hors échantillon. Historique court, "
+        "fiscalité et liquidité réelle non modélisées — aucune performance future n'est garantie.",
         "warn", "⚠️",
     )
     st.caption(
