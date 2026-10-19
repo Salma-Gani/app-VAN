@@ -88,6 +88,21 @@ class TestImportTable(_TempStore):
             stmt.import_table(b"not an excel file", "broken.xlsx")
         self.assertIn("illisible", str(ctx.exception).lower())
 
+    def test_block_table_keeps_source_page_when_available(self) -> None:
+        record = {"lines": {"income": [
+            {"label": "Chiffre d'affaires", "value": 100.0, "page": 12},
+            {"label": "Résultat net", "value": 10.0},
+        ]}}
+        table = stmt.block_table(record, "income")
+        self.assertIn("Page", table.columns)
+        self.assertEqual(int(table.iloc[0]["Page"]), 12)
+        self.assertTrue(pd.isna(table.iloc[1]["Page"]))
+
+    def test_block_table_omits_page_column_when_absent(self) -> None:
+        record = {"lines": {"income": [{"label": "Résultat net", "value": 10.0}]}}
+        table = stmt.block_table(record, "income")
+        self.assertNotIn("Page", table.columns)
+
     def test_imported_balance_is_visible_in_asset_and_liability_tables(self) -> None:
         """Sans lignes détaillées, le bilan doit quand même s'afficher."""
         row: Dict[str, Any] = {column: "" for column in stmt.CSV_COLUMNS}

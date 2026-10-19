@@ -62,7 +62,7 @@ expurgées avant enregistrement du diagnostic.
   non-répétition des 401, réessai des 429/5xx, expurgation des secrets.
 - `tests/test_market_map.py` — structure du treemap, somme secteur = somme membres, gris pour
   donnée manquante, classes de couleur des 5 niveaux de sentiment, horodatage UTC.
-- Suite complète : `python3 -m unittest discover -s tests -q` (134 tests).
+- Suite complète : `python3 -m unittest discover -s tests -q` (136 tests).
 - 17 pages rendues sans exception via `streamlit.testing.v1.AppTest`.
 - `tests/test_statements_import_ratios.py` — import CSV/Excel valide et invalide, exercice
   manquant, ligne sans montant, unités (MAD, milliers, millions, milliards), ratios calculés /

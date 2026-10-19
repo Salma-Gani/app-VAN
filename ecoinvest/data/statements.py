@@ -706,8 +706,12 @@ def block_table(record: Dict[str, Any], block: str) -> pd.DataFrame:
             prior = _num(item.get("prior"))
             if value is None and prior is None:
                 continue
-            rows.append({"Poste": item.get("label") or "", "Exercice": value,
-                         "Exercice précédent": prior})
+            entry: Dict[str, Any] = {"Poste": item.get("label") or "", "Exercice": value,
+                                     "Exercice précédent": prior}
+            page = item.get("page")
+            if page not in (None, ""):
+                entry["Page"] = page
+            rows.append(entry)
     else:
         payload = record.get("balance" if block.startswith("balance") else block) or {}
         label_map = dict(LINE_DEFS.get("balance" if block.startswith("balance") else block, []))
