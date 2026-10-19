@@ -62,7 +62,7 @@ expurgées avant enregistrement du diagnostic.
   non-répétition des 401, réessai des 429/5xx, expurgation des secrets.
 - `tests/test_market_map.py` — structure du treemap, somme secteur = somme membres, gris pour
   donnée manquante, classes de couleur des 5 niveaux de sentiment, horodatage UTC.
-- Suite complète : `python3 -m unittest discover -s tests -q` (136 tests).
+- Suite complète : `python3 -m unittest discover -s tests -q` (139 tests).
 - 17 pages rendues sans exception via `streamlit.testing.v1.AppTest`.
 - `tests/test_statements_import_ratios.py` — import CSV/Excel valide et invalide, exercice
   manquant, ligne sans montant, unités (MAD, milliers, millions, milliards), ratios calculés /
@@ -122,3 +122,22 @@ expurgées avant enregistrement du diagnostic.
 - L'extraction PDF AMMC est une aide à la saisie, jamais une source automatique : la validation
   humaine est obligatoire.
 - `openpyxl` est requis pour Excel (ajouté à `requirements.txt`, installé localement).
+
+## 8. Navigation principale ancrée dans la barre latérale
+
+Streamlit mémorise l'état « replié » de la barre latérale dans le navigateur : après un repli,
+`initial_sidebar_state="expanded"` ne suffisait plus et la navigation disparaissait (retour
+obligatoire par le bouton précédent du navigateur).
+
+Correction :
+
+- `initial_sidebar_state="expanded"` conservé ;
+- la règle CSS neutralise l'état replié (`[aria-expanded="false"]` → largeur 18rem,
+  `transform: none`, `flex: 0 0 18rem`) ;
+- les boutons de repli/dépli sont masqués (`stSidebarCollapseButton`,
+  `stSidebarCollapsedControl`) ;
+- sur écran étroit, la largeur passe à 15rem.
+
+Vérifié dans le navigateur : barre 288 px, 10 liens de navigation visibles, contenu principal
+décalé de 288 px (aucun chevauchement), y compris lorsque l'attribut `aria-expanded` vaut
+`false`. Nouveau test : `tests/test_theme_sidebar.py`.

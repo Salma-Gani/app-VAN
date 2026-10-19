@@ -110,6 +110,29 @@ def inject_css() -> None:
             background: {c['surface']};
             border-right: 1px solid {c['border']};
         }}
+        /* Navigation principale ancrée en permanence : même si l'état « replié »
+           a été mémorisé par le navigateur, la barre reste visible. */
+        section[data-testid="stSidebar"],
+        section[data-testid="stSidebar"][aria-expanded="false"] {{
+            width: 18rem !important;
+            min-width: 18rem !important;
+            max-width: 18rem !important;
+            flex: 0 0 18rem !important;
+            transform: none !important;
+            visibility: visible !important;
+            transition: none !important;
+        }}
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
+        @media (max-width: 700px) {{
+            section[data-testid="stSidebar"],
+            section[data-testid="stSidebar"][aria-expanded="false"] {{
+                width: 15rem !important;
+                min-width: 15rem !important;
+                max-width: 15rem !important;
+                flex: 0 0 15rem !important;
+            }}
+        }}
         section[data-testid="stSidebar"] > div {{ background: {c['surface']}; }}
         section[data-testid="stSidebar"] h1,
         section[data-testid="stSidebar"] h2,
