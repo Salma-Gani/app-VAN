@@ -35,6 +35,7 @@ from ..config import (
     TTL,
 )
 from ..utils import cache
+from .http import ProviderError, classify_status, record_error, record_success
 
 # ═══════════════════════════ Noms de cache ═══════════════════════════
 NS_API = "bvc_api"
@@ -77,15 +78,28 @@ def _api(path: str, params: Optional[Dict[str, Any]] = None, force: bool = False
             if resp.status_code == 200:
                 data = resp.json()
                 cache.set(NS_API, key, data)
+                try:
+                    record_success("BVC", len(data) if isinstance(data, list) else 1, 200)
+                except Exception:
+                    pass
                 return data
+            kind = classify_status(resp.status_code)
+            record_error("BVC", ProviderError(
+                "BVC", resp.status_code, kind, f"HTTP {resp.status_code} sur {path}",
+                kind in {"rate_limit", "server", "timeout", "network"},
+            ))
             last_error = BVCError(f"HTTP {resp.status_code} sur {path}")
         except (requests.RequestException, ValueError) as exc:  # pragma: no cover - réseau
+            record_error("BVC", ProviderError("BVC", None, "network", str(exc), True))
             last_error = exc
         if attempt < HTTP_RETRIES - 1:
             threading.Event().wait(0.6 * (attempt + 1))
 
     stale = cache.get(NS_API, key, None)
     if stale is not None:
+        # Repli explicite : la copie locale est datée par le cache, pas présentée comme du temps réel.
+        record_error("BVC", ProviderError("BVC", None, "network",
+                                          f"API injoignable, copie locale utilisée pour {path}", True))
         return stale
     raise BVCError(f"API BVC injoignable ({path}) : {last_error}")
 

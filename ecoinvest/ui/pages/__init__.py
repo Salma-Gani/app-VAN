@@ -8,6 +8,7 @@ from . import (
     company,
     dashboard,
     fundamentals_page,
+    macro_page,
     news_page,
     parcours_page,
     portfolio_builder,
@@ -36,6 +37,7 @@ __all__ = [
     "sources_page",
     "fundamentals_page",
     "statements_page",
+    "macro_page",
     "parcours_page",
     "projects",
 ]

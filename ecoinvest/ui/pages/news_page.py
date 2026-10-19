@@ -37,6 +37,7 @@ def render() -> None:
         )
         return
 
+    _freshness(df)
     df = _with_holdings(df)
     _summary(df)
     st.divider()
@@ -52,6 +53,25 @@ def _with_holdings(df: pd.DataFrame) -> pd.DataFrame:
     except Exception:
         holdings = []
     return news.holdings_relevance(df, holdings)
+
+
+def _freshness(df: pd.DataFrame) -> None:
+    """Sépare explicitement la date de publication de la date de récupération."""
+    published = pd.to_datetime(df.get("published"), errors="coerce", utc=True) if "published" in df.columns else pd.Series(dtype="datetime64[ns, UTC]")
+    latest = published.max() if not published.dropna().empty else None
+    fetched = pd.to_datetime(df.get("fetched_at"), errors="coerce", utc=True) if "fetched_at" in df.columns else pd.Series(dtype="datetime64[ns, UTC]")
+    fetch_time = fetched.max() if not fetched.dropna().empty else None
+    parts = []
+    parts.append(
+        f"dernière publication : {latest.strftime('%d/%m/%Y %H:%M UTC')}"
+        if latest is not None and not pd.isna(latest) else "date de publication non fournie"
+    )
+    if fetch_time is not None and not pd.isna(fetch_time):
+        parts.append(f"flux récupérés : {fetch_time.strftime('%d/%m/%Y %H:%M UTC')}")
+    st.caption(
+        "Fraîcheur — " + " · ".join(parts)
+        + ". Un article ancien récupéré aujourd'hui reste daté de sa publication."
+    )
 
 
 # ═══════════════════════════ Synthèse ═══════════════════════════
@@ -182,6 +202,19 @@ def _filters(df: pd.DataFrame) -> pd.DataFrame:
 
 def _feed(df: pd.DataFrame) -> None:
     ui.section("Fil d'actualités", "Cliquez sur un titre pour ouvrir l'article dans un nouvel onglet.")
+    st.markdown(
+        "".join(
+            f'<span class="ei-badge {cls}" style="margin-right:.35rem">{label}</span>'
+            for label, cls in (
+                ("Très positif", "ei-tone-very-pos"), ("Positif", "ei-tone-pos"),
+                ("Neutre", "ei-tone-neu"), ("Négatif", "ei-tone-neg"),
+                ("Très négatif", "ei-tone-very-neg"),
+            )
+        )
+        + '<span class="ei-muted" style="font-size:.76rem;margin-left:.5rem">'
+          "couleur = ton de l'article, distincte de l'impact financier estimé</span>",
+        unsafe_allow_html=True,
+    )
     if df.empty:
         ui.empty_state("Aucun article ne correspond aux filtres.", "🔍")
         return
@@ -190,16 +223,41 @@ def _feed(df: pd.DataFrame) -> None:
         _card(item)
 
 
+_SENTIMENT_STYLE = {
+    "Très positif": ("ei-tone-very-pos", "#04543c"),
+    "Positif": ("ei-tone-pos", "#047857"),
+    "Neutre": ("ei-tone-neu", "#64748B"),
+    "Négatif": ("ei-tone-neg", "#B42318"),
+    "Très négatif": ("ei-tone-very-neg", "#7F1D14"),
+}
+
+
+def _fmt_datetime(value: Any) -> Any:
+    """Horodatage lisible en UTC, ou None si absent (jamais remplacé par « maintenant »)."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    try:
+        stamp = pd.Timestamp(value)
+        stamp = stamp.tz_convert("UTC") if stamp.tzinfo else stamp.tz_localize("UTC")
+        return stamp.strftime("%d/%m/%Y %H:%M UTC")
+    except (ValueError, TypeError):
+        return str(value)
+
+
 def _card(item: pd.Series) -> None:
     score = item.get("sentiment") or 0.0
-    tone = "up" if score > 0.12 else "down" if score < -0.12 else "flat"
-    published = item.get("published")
-    date = "—"
-    if published is not None and not pd.isna(published):
-        try:
-            date = pd.Timestamp(published).strftime("%d/%m/%Y %H:%M")
-        except (ValueError, TypeError):
-            date = str(published)
+    label = str(item.get("sentiment_label") or "Neutre")
+    badge_class, border_color = _SENTIMENT_STYLE.get(label, ("ei-tone-neu", "#64748B"))
+    published = _fmt_datetime(item.get("published"))
+    fetched = _fmt_datetime(item.get("fetched_at"))
+    dates = []
+    dates.append(
+        f"Publié le {published}" if published
+        else "Date de publication non fournie par la source"
+    )
+    if fetched:
+        dates.append(f"récupéré le {fetched}")
+    date = " · ".join(dates)
 
     link = str(item.get("link") or "#")
     title = html_mod.escape(str(item.get("title") or "Sans titre"))
@@ -211,24 +269,24 @@ def _card(item: pd.Series) -> None:
     impact = html_mod.escape(str(item.get("impact_level") or ""))
     reason = html_mod.escape(str(item.get("impact_reason") or ""))
     held = html_mod.escape(str(item.get("held") or ""))
-    impact_tone = {"Élevé": "down", "Moyen": "warn"}.get(str(item.get("impact_level") or ""), "flat")
+    impact_tone = {"Élevé": "ei-tone-neg", "Moyen": "ei-warn"}.get(impact, "ei-tone-neu")
 
     st.markdown(
         f"""
-        <div class="ei-card" style="margin-bottom:.65rem">
+        <div class="ei-card" style="margin-bottom:.65rem;border-left:4px solid {border_color}">
           <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start">
             <a href="{link}" target="_blank" rel="noopener"
                style="font-weight:700;font-size:1rem;line-height:1.4;color:{COLORS['text']};text-decoration:none">
               {title}
             </a>
-            <span class="ei-badge ei-{tone}">{html_mod.escape(str(item.get('sentiment_label') or 'Neutre'))}</span>
+            <span class="ei-badge {badge_class}">{html_mod.escape(label)}</span>
           </div>
           <div class="ei-muted" style="font-size:.75rem;margin:.3rem 0">
             {source}{(' · ' + scope) if scope else ''} · {date} · score {score:+.2f}
           </div>
           <div class="ei-muted" style="font-size:.75rem;margin:.15rem 0">
             {category}{(' · impact : ' + impact) if impact else ''}{(' — ' + reason) if reason else ''}
-            <span class="ei-badge ei-{impact_tone}" style="margin-left:.4rem">impact {impact or '—'}</span>
+            <span class="ei-badge {impact_tone}" style="margin-left:.4rem">impact {impact or '—'}</span>
             {(' · <strong>Portefeuille : ' + held + '</strong>') if held else ''}
           </div>
           <div class="ei-muted" style="font-size:.83rem;line-height:1.5">{summary}</div>

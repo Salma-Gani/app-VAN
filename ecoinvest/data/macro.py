@@ -10,10 +10,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-import requests
-
 from ..config import HTTP_TIMEOUT, TTL
 from ..utils import cache
+from .http import ProviderError, request_json
 
 NS = "macro"
 BASE = "https://api.worldbank.org/v2/country/MA/indicator"
@@ -68,19 +67,19 @@ def _fetch(indicator: Dict[str, Any], force: bool = False) -> Dict[str, Any]:
         if isinstance(hit, dict):
             return hit
     try:
-        resp = requests.get(
-            indicator["url"],
-            params={"format": "json", "per_page": 8},
-            timeout=HTTP_TIMEOUT,
-            headers={"User-Agent": "MarketMind/3.1 (research; contact: local)"},
+        parsed = _parse_indicator(
+            request_json(
+                indicator["url"],
+                provider="World Bank",
+                params={"format": "json", "per_page": 8},
+                timeout=HTTP_TIMEOUT,
+                allow_empty=False,
+                headers={"User-Agent": "MarketMind/3.4 (research; contact: local)"},
+            )
         )
-    except requests.RequestException as exc:
-        return {"value": None, "year": None, "updated": None, "error": str(exc)}
-    if resp.status_code != 200:
+    except ProviderError as exc:
         return {"value": None, "year": None, "updated": None,
-                "error": f"HTTP {resp.status_code}"}
-    try:
-        parsed = _parse_indicator(resp.json())
+                "error": exc.user_message, "error_kind": exc.kind}
     except ValueError as exc:
         return {"value": None, "year": None, "updated": None, "error": f"JSON invalide : {exc}"}
     parsed["url"] = indicator["url"]

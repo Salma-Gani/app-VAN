@@ -320,6 +320,13 @@ def inject_css() -> None:
         .ei-good  {{ color: {c['primary']}; background: rgba(15,118,110,.10); border-color: rgba(15,118,110,.26); }}
         .ei-accent {{ color: {c['primary']}; background: rgba(15,118,110,.10); border-color: rgba(15,118,110,.26); }}
 
+        /* Sentiment à cinq niveaux : vert (positif) → gris (neutre) → rouge (négatif) */
+        .ei-tone-very-pos {{ color: #04543c; background: rgba(4,120,87,.20); border-color: rgba(4,120,87,.55); font-weight: 800; }}
+        .ei-tone-pos      {{ color: {c['up']};   background: rgba(4,120,87,.10); border-color: rgba(4,120,87,.30); }}
+        .ei-tone-neu      {{ color: {c['flat']}; background: rgba(100,116,139,.10); border-color: rgba(100,116,139,.26); }}
+        .ei-tone-neg      {{ color: {c['down']}; background: rgba(180,35,24,.09); border-color: rgba(180,35,24,.28); }}
+        .ei-tone-very-neg {{ color: #7f1d14; background: rgba(180,35,24,.20); border-color: rgba(180,35,24,.55); font-weight: 800; }}
+
         .ei-verdict {{
             border-radius: 14px; padding: 18px 22px; border: 1px solid {c['border']};
             background: linear-gradient(120deg, rgba(15,118,110,.07), {c['surface']} 62%);

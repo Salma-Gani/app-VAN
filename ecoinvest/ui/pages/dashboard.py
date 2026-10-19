@@ -1,6 +1,7 @@
 """Tableau de bord : vue d'ensemble du marché marocain et international."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict
 
 import pandas as pd
@@ -28,8 +29,13 @@ def render() -> None:
 
     ui.source_note(
         ["Bourse de Casablanca (API publique)", "Yahoo Finance", "Flux RSS publics"],
-        as_of=f"clôture du {shared.last_market_date(table)}",
-        detail="Cours différés ; les fondamentaux hors titres/dividende sont saisis par l'utilisateur.",
+        as_of=f"séance de clôture du {shared.last_market_date(table)} (dernière séance disponible)",
+        detail=(
+            f"Données récupérées le {datetime.now().strftime('%d/%m/%Y à %H:%M')} · "
+            "cours différés BVC (cache 15 min), indicateurs internationaux selon Yahoo Finance · "
+            "la période comptable des fondamentaux est indiquée sur chaque fiche, elle ne correspond "
+            "pas à la date de séance."
+        ),
     )
 
     _kpi_strip(regime, indices, table)
@@ -42,8 +48,7 @@ def render() -> None:
         _vix_block(regime)
 
     st.divider()
-    ui.section("Carte du marché", "Taille = capitalisation boursière · couleur = performance de la séance.")
-    ui.plot(charts.sector_treemap(table), key="dash_treemap", height=520)
+    _market_map(table)
 
     st.divider()
     col_a, col_b = st.columns(2, gap="medium")
@@ -100,7 +105,7 @@ def _kpi_strip(regime: Dict[str, Any], indices: pd.DataFrame, table: pd.DataFram
         "tone": "accent" if (breadth.get("breadth") or 0) > 0 else "danger",
     })
     items.append({
-        "label": "VIX (volatilité)",
+        "label": "VIX (S&P 500)",
         "value": fmt_num(vix.get("level"), 2),
         "sub": str(vix.get("label") or "—"),
         "tone": "warn",
@@ -153,9 +158,129 @@ def _masi_chart() -> None:
     ui.plot(fig, key="dash_masi")
 
 
+def _market_map(table: pd.DataFrame) -> None:
+    """Carte thermique filtrable + largeur de marché calculée sur les mêmes données."""
+    ui.section(
+        "Carte du marché",
+        "Taille = capitalisation boursière · couleur = performance sur la période choisie. "
+        "Une valeur sans donnée reste grise : aucune variation n'est inventée.",
+    )
+    if table is None or table.empty:
+        ui.empty_state(
+            "Carte indisponible : aucune capitalisation n'a pu être chargée depuis la BVC. "
+            "Réessayez l'actualisation ; les autres modules restent utilisables.",
+            "🗺️",
+        )
+        return
+
+    sectors = sorted(str(s) for s in table["sector"].dropna().unique()) if "sector" in table.columns else []
+    c1, c2, c3 = st.columns([1.6, 1, 1])
+    with c1:
+        chosen_sectors = st.multiselect(
+            "Secteurs", sectors, default=[], placeholder="Tous les secteurs",
+            key="dash_map_sectors",
+        )
+    with c2:
+        metric_label = st.selectbox(
+            "Couleur", ["Séance", "YTD", "1 an", "3 mois"], index=0, key="dash_map_metric",
+        )
+    with c3:
+        index_code = st.selectbox("Indice", ["Tous", "MASI", "MSI20"], index=0, key="dash_map_index")
+
+    metric_col = {
+        "Séance": "change_pct", "YTD": "ytd_pct", "1 an": "return_12m", "3 mois": "return_3m",
+    }[metric_label]
+
+    sub = table.copy()
+    if chosen_sectors and "sector" in sub.columns:
+        sub = sub[sub["sector"].isin(chosen_sectors)]
+    if index_code != "Tous" and "symbol" in sub.columns:
+        members = shared.index_members(index_code)
+        if members:
+            sub = sub[sub["symbol"].astype(str).isin(members)]
+        else:
+            st.caption(
+                f"Composition officielle de {index_code} indisponible : le filtre d'indice est "
+                "ignoré, la carte affiche toutes les valeurs."
+            )
+
+    if sub.empty:
+        ui.empty_state("Aucune valeur ne correspond aux filtres sélectionnés.", "🔍")
+    else:
+        ui.plot(
+            charts.sector_treemap(
+                sub, color_col=metric_col, color_label=metric_label, height=560,
+            ),
+            key="dash_treemap", height=560,
+        )
+
+    _breadth_bar(table, sub)
+    st.caption(
+        "Vert = hausse, rouge = baisse, gris = donnée indisponible ou inchangée. "
+        "La capitalisation provient de la BVC ; elle n'est pas estimée à partir d'un cours théorique."
+    )
+
+
+def _breadth_bar(table: pd.DataFrame, selected: pd.DataFrame) -> None:
+    """Largeur de marché : hausses / baisses / inchangés, en nombre et en proportion."""
+    change = pd.to_numeric(table.get("change_pct"), errors="coerce") if "change_pct" in table.columns else pd.Series(dtype=float)
+    up = int((change > 0).sum())
+    down = int((change < 0).sum())
+    flat = int((change == 0).sum())
+    missing = int(change.isna().sum())
+    total = up + down + flat + missing
+    if total == 0:
+        st.caption("Largeur de marché indisponible : aucune variation publiée.")
+        return
+    pct = lambda n: 100.0 * n / total
+    st.markdown(
+        f"""
+        <div style="display:flex;align-items:center;gap:.8rem;margin:.4rem 0 .2rem">
+          <span class="ei-badge ei-up">▲ {up} hausses · {pct(up):.0f} %</span>
+          <span class="ei-badge ei-down">▼ {down} baisses · {pct(down):.0f} %</span>
+          <span class="ei-badge ei-flat">= {flat} inchangés · {pct(flat):.0f} %</span>
+          <span class="ei-muted" style="font-size:.78rem">{missing} sans variation publiée · {len(selected)} affichées après filtres</span>
+        </div>
+        <div style="display:flex;height:10px;border-radius:6px;overflow:hidden;border:1px solid {COLORS['border']}">
+          <div style="width:{pct(up):.2f}%;background:{COLORS['up']}"></div>
+          <div style="width:{pct(flat):.2f}%;background:{COLORS['flat']}"></div>
+          <div style="width:{pct(missing):.2f}%;background:{COLORS['muted']}"></div>
+          <div style="width:{pct(down):.2f}%;background:{COLORS['down']}"></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _masi_volatility() -> None:
+    """Volatilité réalisée du MASI, calculée sur l'historique réel (pas le VIX)."""
+    hist = shared.index_history("MASI", "6M")
+    if hist is None or hist.empty or "value" not in hist.columns:
+        st.caption("Volatilité réalisée du MASI indisponible : historique d'indice non chargé.")
+        return
+    frame = hist.copy()
+    if "date" in frame.columns:
+        frame = frame.sort_values("date")
+    series = pd.to_numeric(frame["value"], errors="coerce").dropna()
+    if len(series) < 20:
+        st.caption("Volatilité réalisée du MASI : historique insuffisant (moins de 20 séances).")
+        return
+    returns = series.pct_change().dropna().tail(60)
+    vol = float(returns.std(ddof=1) * (252 ** 0.5) * 100.0)
+    st.metric("Volatilité réalisée du MASI (annualisée)", f"{vol:.1f} %")
+    st.caption(
+        f"Calcul : écart-type des rendements quotidiens du MASI sur {len(returns)} séances × √252. "
+        "Mesure **réalisée** (passée) propre à Casablanca, distincte de la volatilité implicite du VIX."
+    )
+
+
 def _vix_block(regime: Dict[str, Any]) -> None:
     vix = regime.get("vix") or {}
-    ui.section("Volatilité implicite (VIX)", "Niveau et implication sur le momentum d'entrée.")
+    ui.section(
+        "Volatilité — VIX (S&P 500)",
+        "Référence internationale : le VIX mesure la volatilité implicite des options sur le S&P 500, "
+        "**pas** celle du MASI.",
+    )
     ui.plot(charts.gauge(vix.get("level"), title="VIX", max_value=45,
                          steps=[(0, 12, COLORS["accent"]), (12, 16, COLORS["primary"]),
                                 (16, 22, COLORS["accent"]), (22, 30, COLORS["warning"]),
@@ -169,6 +294,7 @@ def _vix_block(regime: Dict[str, Any]) -> None:
     )
     if pct is not None:
         st.caption(f"Niveau actuel supérieur à {pct:.0%} des observations des trois dernières années.")
+    _masi_volatility()
     comps = regime.get("components") or {}
     if comps:
         st.markdown("**Décomposition du régime de marché**")

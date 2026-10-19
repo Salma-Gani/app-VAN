@@ -42,6 +42,7 @@ from ..config import (
     USER_STATEMENTS_FILE,
 )
 from ..utils import cache
+from .http import ProviderError, request_json
 
 NS = "statements"
 AMMC_BASE = "https://www.ammc.ma"
@@ -601,16 +602,12 @@ def provider_status() -> List[Dict[str, Any]]:
     return out
 
 
-def _http_json(url: str, params: Optional[Dict[str, Any]] = None) -> Any:
+def _http_json(url: str, params: Optional[Dict[str, Any]] = None,
+               provider: str = "API états financiers") -> Any:
     try:
-        response = requests.get(url, params=params or {}, headers=HTTP_HEADERS,
-                                timeout=HTTP_TIMEOUT)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as exc:
-        raise StatementError(f"Requête échouée ({url}) : {exc}") from exc
-    except ValueError as exc:
-        raise StatementError(f"Réponse illisible ({url}) : {exc}") from exc
+        return request_json(url, provider=provider, params=params, allow_empty=False)
+    except ProviderError as exc:
+        raise StatementError(exc.user_message) from exc
 
 
 def _pick(payload: Dict[str, Any], *keys: str) -> Optional[float]:
@@ -643,7 +640,7 @@ def fetch_eodhd(symbol: str, api_key: Optional[str] = None, exchange: Optional[s
     if "." not in ticker:
         ticker = f"{ticker}.{exchange}"
     payload = _http_json(f"https://eodhd.com/api/v1.1/fundamentals/{ticker}",
-                         {"api_token": api_key, "fmt": "json"})
+                         {"api_token": api_key, "fmt": "json"}, provider="EODHD")
     if not isinstance(payload, dict) or "Financials" not in payload:
         raise StatementError(f"EODHD : aucune donnée financière pour {ticker}.")
     general = payload.get("General") or {}
@@ -712,7 +709,7 @@ def fetch_fmp(symbol: str, api_key: Optional[str] = None, limit: int = 5) -> Lis
     params = {"period": "annual", "limit": limit, "apikey": api_key}
 
     def endpoint(name: str) -> Dict[str, Dict[str, Any]]:
-        rows = _http_json(f"{base}/{name}/{ticker}", params)
+        rows = _http_json(f"{base}/{name}/{ticker}", params, provider="FMP")
         if not isinstance(rows, list):
             raise StatementError(f"FMP : réponse inattendue pour {ticker} ({name}).")
         out = {}

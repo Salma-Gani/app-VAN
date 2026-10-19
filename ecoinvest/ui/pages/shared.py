@@ -72,6 +72,20 @@ def index_history(code: str = "MASI", period: str = "1Y") -> pd.DataFrame:
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=3600, **CACHE_KW)
+def index_members(code: str) -> set:
+    """Symboles composant un indice (composition officielle BVC), vide si indisponible."""
+    if not code or code == "Tous":
+        return set()
+    try:
+        frame = bvc.index_composition(code)
+        if frame is None or frame.empty or "symbol" not in frame.columns:
+            return set()
+        return {str(s) for s in frame["symbol"].dropna()}
+    except Exception:
+        return set()
+
+
 @st.cache_data(ttl=1800, **CACHE_KW)
 def stock_history(symbol: str, days: int = 400) -> pd.DataFrame:
     try:

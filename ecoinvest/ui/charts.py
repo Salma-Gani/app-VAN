@@ -358,40 +358,117 @@ def radar(dimensions: Dict[str, Optional[float]], title: str = "", height: int =
 
 
 def sector_treemap(df: pd.DataFrame, height: int = 520,
-                   title: str = "Carte du marché — capitalisation et performance du jour") -> go.Figure:
-    """Treemap secteur → valeur, taille = capitalisation, couleur = performance."""
+                   title: str = "Carte du marché — capitalisation et performance",
+                   color_col: str = "change_pct",
+                   color_label: str = "Variation du jour") -> go.Figure:
+    """Treemap secteur → valeur, taille = capitalisation, couleur = performance.
+
+    Les nœuds « secteur » sont explicites : sans eux, Plotly n'affiche rien quand
+    ``parents`` référence des libellés absents de ``labels``. Les valeurs manquantes
+    sont grises (jamais inventées) ; le survol expose ticker, cours, variation,
+    volume et capitalisation.
+    """
     if df is None or df.empty:
-        return _base(go.Figure(), "Aucune donnée", 300)
-    sub = df.dropna(subset=["cap"]).copy()
+        return _base(go.Figure(), "Aucune donnée de marché", 300)
+    sub = df.copy()
+    for col in ("cap", "close", "change_pct", "volume"):
+        if col not in sub.columns:
+            sub[col] = np.nan
+        sub[col] = pd.to_numeric(sub[col], errors="coerce")
+    if "sector" not in sub.columns:
+        sub["sector"] = "Autres"
+    if "symbol" not in sub.columns:
+        sub["symbol"] = ""
+    if "name" not in sub.columns:
+        sub["name"] = sub["symbol"]
+    sub["sector"] = sub["sector"].fillna("Autres").replace("", "Autres")
+    sub["name"] = sub["name"].fillna(sub["symbol"]).astype(str)
+    sub = sub.dropna(subset=["cap"])
     sub = sub[sub["cap"] > 0]
     if sub.empty:
-        return _base(go.Figure(), "Aucune donnée", 300)
-    sub["change_pct"] = sub["change_pct"].fillna(0.0)
-    lim = float(np.nanpercentile(np.abs(sub["change_pct"]), 95)) or 0.05
-    lim = max(lim, 0.01)
+        return _base(go.Figure(), "Aucune capitalisation disponible", 300)
+
+    metric = pd.to_numeric(sub[color_col], errors="coerce") if color_col in sub.columns else pd.Series(
+        np.nan, index=sub.index
+    )
+    if color_col == "change_pct":
+        # Variation en fraction → points de pourcentage pour l'affichage.
+        metric = metric * 100.0
+    sub["_metric"] = metric
+
+    def tile_color(value: Any) -> str:
+        if value is None or pd.isna(value):
+            return C["muted"]
+        if value > 0:
+            return C["up"]
+        if value < 0:
+            return C["down"]
+        return "#B8B2A6"
+
+    def pct(value: Any) -> str:
+        return "n.d." if value is None or pd.isna(value) else f"{float(value):+.2f} %"
+
+    def number(value: Any, decimals: int = 0) -> str:
+        return "n.d." if value is None or pd.isna(value) else f"{float(value):,.{decimals}f}"
+
+    sectors = (
+        sub.groupby("sector", as_index=False)
+        .agg(cap=("cap", "sum"), count=("symbol", "size"))
+        .sort_values("cap", ascending=False)
+    )
+    labels: List[str] = list(sectors["sector"])
+    parents: List[str] = [""] * len(sectors)
+    values: List[float] = [float(v) for v in sectors["cap"]]
+    colors: List[str] = [C["navy"] for _ in range(len(sectors))]
+    texts: List[str] = [
+        f"<b>{row.sector}</b><br>{row['count']} valeur(s)"
+        for _, row in sectors.iterrows()
+    ]
+    hover: List[List[str]] = [
+        [str(row.sector), f"{int(row['count'])} valeur(s)", "—", "—", "—",
+         f"{float(row.cap):,.0f} MAD", str(row.sector)]
+        for _, row in sectors.iterrows()
+    ]
+
+    for _, row in sub.sort_values("cap", ascending=False).iterrows():
+        value = row["_metric"]
+        labels.append(f"{row['symbol']} · {row['name']}")
+        parents.append(str(row["sector"]))
+        values.append(float(row["cap"]))
+        colors.append(tile_color(value))
+        texts.append(f"<b>{row['symbol']}</b><br>{pct(value)}")
+        hover.append([
+            str(row["symbol"]), str(row["name"]), number(row["close"], 2),
+            pct(value), number(row["volume"], 0), f"{float(row['cap']):,.0f} MAD",
+            str(row["sector"]),
+        ])
 
     fig = go.Figure(
         go.Treemap(
-            labels=sub["symbol"] + " · " + sub["name"],
-            parents=sub["sector"],
-            values=sub["cap"],
-            customdata=np.stack([sub["close"], sub["change_pct"] * 100], axis=-1),
-            texttemplate="<b>%{label}</b><br>%{customdata[1]:+.2f} %",
-            hovertemplate=(
-                "<b>%{label}</b><br>Capitalisation : %{value:,.0f} MAD<br>"
-                "Cours : %{customdata[0]:,.2f} MAD<br>Variation : %{customdata[1]:+.2f} %<extra></extra>"
-            ),
-            marker=dict(
-                colors=sub["change_pct"],
-                colorscale=[[0, C["down"]], [0.5, "#EDE8DD"], [1, C["up"]]],
-                cmid=0, cmin=-lim, cmax=lim,
-                line=dict(color=C["bg"], width=1.4),
-            ),
-            textfont=dict(size=11),
+            labels=labels,
+            parents=parents,
+            values=values,
             branchvalues="total",
+            text=texts,
+            texttemplate="%{text}",
+            textfont=dict(size=12, color="#FFFFFF"),
+            customdata=hover,
+            marker=dict(colors=colors, line=dict(color=C["bg"], width=1.2)),
+            hovertemplate=(
+                "<b>%{customdata[0]}</b> — %{customdata[1]}<br>"
+                "Secteur : %{customdata[6]}<br>"
+                "Cours : %{customdata[2]} MAD<br>"
+                f"{color_label} : " + "%{customdata[3]}<br>"
+                "Volume : %{customdata[4]}" + "<br>"
+                "Capitalisation : %{customdata[5]}"
+                "<extra></extra>"
+            ),
         )
     )
-    fig.update_layout(title=title, height=height, margin=dict(l=6, r=6, t=48, b=6))
+    fig.update_layout(
+        title=title, height=height, margin=dict(l=6, r=6, t=48, b=6),
+        uniformtext=dict(minsize=9, mode="hide"),
+    )
     return fig
 
 

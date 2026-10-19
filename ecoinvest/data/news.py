@@ -18,6 +18,7 @@ import requests
 
 from ..config import HTTP_HEADERS, HTTP_TIMEOUT, TTL
 from ..utils import cache
+from .http import ProviderError, classify_status, record_error, record_success
 
 NS = "news"
 
@@ -146,9 +147,24 @@ def _fetch_source(source: Dict[str, str]) -> List[Dict[str, Any]]:
     try:
         resp = _session().get(source["url"], timeout=HTTP_TIMEOUT)
         if resp.status_code != 200:
+            kind = classify_status(resp.status_code)
+            record_error(source["name"], ProviderError(
+                source["name"], resp.status_code, kind, f"HTTP {resp.status_code}",
+                kind in {"rate_limit", "server", "timeout", "network"},
+            ))
             return []
-        return parse_feed(resp.text, source["name"], source.get("scope", ""))
-    except requests.RequestException:
+        items = parse_feed(resp.text, source["name"], source.get("scope", ""))
+        if not items:
+            record_error(source["name"], ProviderError(
+                source["name"], 200, "empty", "flux sans article exploitable", False,
+            ))
+        else:
+            record_success(source["name"], len(items), 200)
+        return items
+    except requests.RequestException as exc:
+        record_error(source["name"], ProviderError(
+            source["name"], None, "network", str(exc), True,
+        ))
         return []
 
 
@@ -173,6 +189,10 @@ def fetch_all_news(max_age_days: int = 14, force: bool = False) -> pd.DataFrame:
     if df.empty:
         stale = cache.get(NS, key, None)
         return stale if stale is not None else df
+
+    # Date de récupération distincte de la date de publication : une actualité
+    # ancienne reste ancienne, même si elle vient d'être importée.
+    df["fetched_at"] = pd.Timestamp.now(tz="UTC")
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
     df = df[df["published"].isna() | (df["published"] >= cutoff)]
@@ -201,6 +221,7 @@ def google_news_query(query: str, limit: int = 25, force: bool = False) -> pd.Da
         items = []
     df = pd.DataFrame(items[:limit])
     if not df.empty:
+        df["fetched_at"] = pd.Timestamp.now(tz="UTC")
         df["sentiment"] = df.apply(lambda r: score_text(f"{r['title']} {r['summary']}"), axis=1)
         df["sentiment_label"] = df["sentiment"].apply(sentiment_label)
         df = enrich_news(df)

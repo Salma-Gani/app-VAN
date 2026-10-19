@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 from ..config import HTTP_TIMEOUT, USER_AI_FILE
+from ..data.http import ProviderError, classify_status, record_error, record_success
 
 # ═══════════════════════════ Définition des fournisseurs ═══════════════════════════
 
@@ -145,6 +146,28 @@ class LLMError(RuntimeError):
     pass
 
 
+def _post(url: str, label: str, **kwargs: Any) -> requests.Response:
+    """POST avec erreurs classifiées et message utilisateur sans secret ni corps brut."""
+    try:
+        response = requests.post(url, **kwargs)
+    except requests.Timeout as exc:
+        err = ProviderError(label, None, "timeout", str(exc), True)
+        record_error(label, err)
+        raise LLMError(err.user_message) from exc
+    except requests.RequestException as exc:
+        err = ProviderError(label, None, "network", str(exc), True)
+        record_error(label, err)
+        raise LLMError(err.user_message) from exc
+
+    if response.status_code != 200:
+        kind = classify_status(response.status_code)
+        err = ProviderError(label, response.status_code, kind, f"HTTP {response.status_code}")
+        record_error(label, err)
+        raise LLMError(err.user_message)
+    record_success(label, None, response.status_code)
+    return response
+
+
 class LLMClient:
     """Client unifié : ``client.chat(messages, system=...)``."""
 
@@ -176,8 +199,9 @@ class LLMClient:
     # ─── Implémentations ───
     def _openai_compatible(self, messages, system, temperature, max_tokens) -> str:
         payload_messages = ([{"role": "system", "content": system}] if system else []) + messages
-        resp = requests.post(
+        resp = _post(
             f"{self.provider.base_url.rstrip('/')}/chat/completions",
+            self.provider.label,
             headers={
                 "Authorization": f"Bearer {self.credential}",
                 "Content-Type": "application/json",
@@ -190,8 +214,6 @@ class LLMClient:
             },
             timeout=90,
         )
-        if resp.status_code != 200:
-            raise LLMError(f"{self.provider.label} : HTTP {resp.status_code} — {resp.text[:300]}")
         data = resp.json()
         try:
             return data["choices"][0]["message"]["content"].strip()
@@ -199,8 +221,9 @@ class LLMClient:
             raise LLMError(f"Réponse inattendue de {self.provider.label} : {exc}") from exc
 
     def _anthropic(self, messages, system, temperature, max_tokens) -> str:
-        resp = requests.post(
+        resp = _post(
             f"{self.provider.base_url.rstrip('/')}/messages",
+            self.provider.label,
             headers={
                 "x-api-key": self.credential or "",
                 "anthropic-version": "2023-06-01",
@@ -215,8 +238,6 @@ class LLMClient:
             },
             timeout=90,
         )
-        if resp.status_code != 200:
-            raise LLMError(f"Anthropic : HTTP {resp.status_code} — {resp.text[:300]}")
         data = resp.json()
         try:
             return "".join(b.get("text", "") for b in data["content"]).strip()
@@ -234,14 +255,13 @@ class LLMClient:
         }
         if system:
             body["systemInstruction"] = {"parts": [{"text": system}]}
-        resp = requests.post(
+        resp = _post(
             f"{self.provider.base_url.rstrip('/')}/models/{self.model}:generateContent",
+            self.provider.label,
             params={"key": self.credential},
             json=body,
             timeout=90,
         )
-        if resp.status_code != 200:
-            raise LLMError(f"Gemini : HTTP {resp.status_code} — {resp.text[:300]}")
         data = resp.json()
         try:
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -250,8 +270,9 @@ class LLMClient:
 
     def _ollama(self, messages, system, temperature, max_tokens) -> str:
         payload_messages = ([{"role": "system", "content": system}] if system else []) + messages
-        resp = requests.post(
+        resp = _post(
             f"{(self.credential or self.provider.base_url).rstrip('/')}/api/chat",
+            self.provider.label,
             json={
                 "model": self.model,
                 "messages": payload_messages,
@@ -260,8 +281,6 @@ class LLMClient:
             },
             timeout=180,
         )
-        if resp.status_code != 200:
-            raise LLMError(f"Ollama : HTTP {resp.status_code} — {resp.text[:300]}")
         data = resp.json()
         try:
             return data["message"]["content"].strip()
