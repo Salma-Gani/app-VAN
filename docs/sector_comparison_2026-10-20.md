@@ -38,6 +38,8 @@ performances affichés ailleurs dans l'application.
   `Chimie — 2 valeur(s) · 1 avec ratios`.
 - Cinq indicateurs clés : sociétés, capitalisation médiane, P/E médian,
   ROE médian, rendement médian — chacun avec le nombre de valeurs utilisées.
+  La grille s'adapte à la largeur disponible (2 à 5 cartes par ligne) pour ne
+  jamais couper les libellés.
 - Quatre onglets :
   1. **Tableau comparatif** : marché, fondamentaux, ligne « Médiane du
      secteur », détail par société (valeur, rang, formule, statut, exercice,

@@ -147,12 +147,12 @@ def _default_sector_index(table: pd.DataFrame, sectors: List[str]) -> int:
 
 def _kpis(chosen: str, frame: pd.DataFrame, medians: Dict[str, Dict[str, Any]],
           coverage: Dict[str, int]) -> None:
-    ui.kpi_row(
+    ui.kpi_grid(
         [
-            {"label": "Sociétés du secteur", "value": fmt_num(len(frame), 0),
+            {"label": "Sociétés", "value": fmt_num(len(frame), 0),
              "sub": f"{coverage['with_statement']} états vérifiés · "
                     f"{coverage['with_ratios']} avec ratios", "tone": "blue"},
-            {"label": "Capitalisation médiane",
+            {"label": "Cap. médiane",
              "value": _fmt_value("cap", medians["cap"]["value"]),
              "sub": _median_sub(medians, "cap"), "tone": "accent"},
             {"label": "P/E médian", "value": _fmt_value("r_per", medians["r_per"]["value"]),
@@ -163,7 +163,7 @@ def _kpis(chosen: str, frame: pd.DataFrame, medians: Dict[str, Dict[str, Any]],
              "value": _fmt_value("r_dividend_yield", medians["r_dividend_yield"]["value"]),
              "sub": _median_sub(medians, "r_dividend_yield"), "tone": "warn"},
         ],
-        per_row=5,
+        min_width=170,
     )
 
 

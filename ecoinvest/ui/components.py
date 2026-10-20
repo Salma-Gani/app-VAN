@@ -125,6 +125,22 @@ def kpi_row(items: Sequence[Dict[str, Any]], per_row: int = 4) -> None:
                 kpi_card(**item)
 
 
+def kpi_grid(items: Sequence[Dict[str, Any]], min_width: int = 160) -> None:
+    """Grille de cartes KPI qui s'adapte à la largeur disponible.
+
+    Contrairement à :func:`kpi_row`, le nombre de colonnes n'est pas figé : sur
+    un écran étroit, les cartes passent à la ligne au lieu de couper les
+    libellés au milieu des mots.
+    """
+    if not items:
+        return
+    cards = "".join(kpi_html(**item) for item in items)
+    st.markdown(
+        f'<div class="ei-kpi-grid" style="--ei-kpi-min:{int(min_width)}px">{cards}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def metric_delta(label: str, value: str, delta: Optional[float] = None,
                  help_text: str = "") -> None:
     st.metric(label, value, None if delta is None else fmt_pct(delta, 2, signed=True),

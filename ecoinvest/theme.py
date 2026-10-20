@@ -182,6 +182,15 @@ def inject_css() -> None:
         }}
         .ei-kpi-sub {{ font-size: .78rem; color: {c['muted']}; }}
 
+        /* Grille KPI responsive : évite de couper les libellés sur écran étroit. */
+        .ei-kpi-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(var(--ei-kpi-min, 160px), 1fr));
+            gap: 12px;
+            margin: .35rem 0 .9rem;
+        }}
+        .ei-kpi-grid .ei-card {{ margin: 0; height: 100%; }}
+
         /* ── En-tête de page interne ────────────────────────── */
         .ei-hero {{
             background: {c['surface']};
