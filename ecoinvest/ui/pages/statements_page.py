@@ -297,7 +297,7 @@ def _kpis(record: Dict[str, Any], market_row: pd.Series) -> None:
             {"label": "Résultat d'exploitation", "value": amount(income.get("operating_income")),
              "sub": "EBIT", "tone": "accent"},
             {"label": "Résultat net", "value": amount(income.get("net_income")),
-             "sub": "part du groupe", "tone": "up"},
+             "sub": "consolidé" if record.get("consolidated") else "sociaux", "tone": "up"},
             {"label": "Capitaux propres", "value": amount(balance.get("equity")),
              "sub": "actif net comptable", "tone": "info"},
             {"label": "Free Cash-Flow", "value": amount(cashflow.get("free_cash_flow")),
@@ -307,8 +307,29 @@ def _kpis(record: Dict[str, Any], market_row: pd.Series) -> None:
     )
 
 
+def _exercise_columns(df: pd.DataFrame, record: Dict[str, Any]) -> pd.DataFrame:
+    """Renomme « Exercice »/« Exercice précédent » avec l'année réellement affichée."""
+    if df is None or df.empty:
+        return df
+    try:
+        year = int(record.get("fiscal_year"))
+    except (TypeError, ValueError):
+        return df
+    mapping = {"Exercice": f"Exercice {year}", "Exercice précédent": f"Exercice {year - 1}"}
+    return df.rename(columns={k: v for k, v in mapping.items() if k in df.columns})
+
+
 def _block(record: Dict[str, Any], block: str, title: str, subtitle: str) -> None:
     ui.section(title, subtitle)
+    year = record.get("fiscal_year")
+    kind = "comptes consolidés" if record.get("consolidated") else "comptes sociaux"
+    st.markdown(
+        ui.badge(f"Exercice {year} · {kind}", "info") + " " +
+        ui.badge(str(record.get("source") or "source non renseignée"), "accent"),
+        unsafe_allow_html=True,
+    )
+    for problem in stmt.record_issues(record):
+        st.warning(problem)
     table = stmt.block_table(record, block)
     if table.empty:
         ui.note(
@@ -318,6 +339,11 @@ def _block(record: Dict[str, Any], block: str, title: str, subtitle: str) -> Non
             "warn", "—",
         )
         return
+    if not (record.get("lines") or {}).get(block):
+        st.caption(
+            f"Détail des postes non disponible pour l'exercice {year} : les agrégats "
+            "vérifiés sont affichés (aucune ligne n'est inventée)."
+        )
     unit = record.get("unit")
     st.caption(
         f"Montants exprimés en {record.get('currency') or 'MAD'} "
@@ -325,7 +351,7 @@ def _block(record: Dict[str, Any], block: str, title: str, subtitle: str) -> Non
         + (" Conversion en MAD appliquée pour l'affichage." if stmt.unit_multiplier(unit) != 1 else "")
     )
     ui.table(
-        _fmt_block(table, unit),
+        _exercise_columns(_fmt_block(table, unit), record),
         height=430,
         key=f"stmt_{record.get('symbol')}_{block}_{record.get('fiscal_year')}_{int(bool(record.get('consolidated')))}",
     )

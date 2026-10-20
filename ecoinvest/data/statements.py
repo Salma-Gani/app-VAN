@@ -691,6 +691,69 @@ def _fallback_keys(block: str) -> List[str]:
     return CANONICAL_KEYS.get(block, [])
 
 
+# ═══════════════════════════ Contrôles de cohérence ═══════════════════════════
+
+# Agrégats canoniques qui doivent impérativement apparaître dans le détail
+# (``lines``) s'il existe : sinon le détail est rattaché au mauvais exercice.
+_AGGREGATE_CHECKS: Tuple[Tuple[str, str], ...] = (
+    ("income", "revenue"),
+    ("income", "net_income"),
+    ("balance", "total_assets"),
+    ("balance", "equity"),
+)
+
+
+def _detail_values(record: Dict[str, Any]) -> List[float]:
+    values: List[float] = []
+    for items in (record.get("lines") or {}).values():
+        for item in items or []:
+            value = _num(item.get("value"))
+            if value is not None:
+                values.append(value)
+    return values
+
+
+def record_issues(record: Dict[str, Any]) -> List[str]:
+    """Anomalies d'un état financier, sans jamais modifier les montants.
+
+    Détecte notamment le cas où les lignes détaillées (``lines``) ne
+    correspondent pas aux agrégats canoniques : signe qu'elles proviennent d'un
+    autre exercice — c'est exactement le bug « 2023 affiche 2024 ».
+    """
+    issues: List[str] = []
+    if not record:
+        return issues
+    lines = record.get("lines") or {}
+    if not any(items for items in lines.values()):
+        return issues
+    values = _detail_values(record)
+    if not values:
+        return issues
+    year = record.get("fiscal_year")
+    for block, key in _AGGREGATE_CHECKS:
+        aggregate = _num((record.get(block) or {}).get(key))
+        if aggregate is None:
+            continue
+        if not any(abs(value - aggregate) <= max(1.0, abs(aggregate) * 0.002) for value in values):
+            issues.append(
+                f"Le détail ne contient pas l'agrégat « {key} » "
+                f"({aggregate:,.0f}) de l'exercice {year} : lignes probablement "
+                "rattachées à un autre exercice."
+            )
+    return issues
+
+
+def store_issues() -> Dict[str, List[str]]:
+    """Anomalies détectées dans tout le magasin (clé ``SYMBOLE exercice``)."""
+    report: Dict[str, List[str]] = {}
+    for symbol, records in load_store().items():
+        for record in records:
+            problems = record_issues(record)
+            if problems:
+                report[f"{symbol} {record.get('fiscal_year')}"] = problems
+    return report
+
+
 def block_table(record: Dict[str, Any], block: str) -> pd.DataFrame:
     """Tableau prêt à afficher pour un bloc (``income``, ``balance``, ``cashflow``).
 
