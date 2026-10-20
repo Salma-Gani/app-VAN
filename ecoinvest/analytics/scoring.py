@@ -111,7 +111,10 @@ def build_market_table(
             rsi_v, macd_hist, macd_v = None, None, None
 
         f = fundamentals.get_fundamentals(symbol, row) if include_fundamentals else {}
-        ratios = fundamentals.compute_ratios(f, price=as_float(row.get("close")), cap=as_float(row.get("cap"))) if include_fundamentals else {}
+        ratios = fundamentals.compute_ratios(
+            f, price=as_float(row.get("close")), cap=as_float(row.get("cap")),
+            sector=str(row.get("sector") or ""),
+        ) if include_fundamentals else {}
 
         rows.append(
             {

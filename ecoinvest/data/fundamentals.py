@@ -30,6 +30,19 @@ from .http import record_exception
 NS = "fundamentals"
 STORE_SEED = SEED_DIR / "bvc_fundamentals.json"
 
+# Secteurs pour lesquels les multiples d'entreprise et le levier ne sont pas
+# pertinents (bilan bancaire / assurantiel).
+FINANCIAL_SECTOR_KEYWORDS = (
+    "banque", "assurance", "finance", "société de financement",
+    "sociétés de financement", "holding financière",
+)
+
+
+def is_financial_sector(sector: Optional[str]) -> bool:
+    """Vrai pour les banques, assurances et sociétés de financement."""
+    low = (sector or "").lower()
+    return any(word in low for word in FINANCIAL_SECTOR_KEYWORDS)
+
 # ═══════════════════════════ Schéma des champs ═══════════════════════════
 FIELD_SCHEMA: List[Dict[str, Any]] = [
     {"key": "revenue", "label": "Chiffre d'affaires", "unit": "MAD", "group": "Compte de résultat", "hint": "Ventes nettes du dernier exercice"},
@@ -289,8 +302,14 @@ def get_fundamentals(symbol: str, market_row: Optional[pd.Series] = None) -> Dic
 
 # ═══════════════════════════ Ratios ═══════════════════════════
 
-def compute_ratios(f: Dict[str, Any], price: Optional[float] = None, cap: Optional[float] = None) -> Dict[str, Optional[float]]:
-    """Calcule l'ensemble des ratios à partir d'une fiche fondamentale."""
+def compute_ratios(f: Dict[str, Any], price: Optional[float] = None, cap: Optional[float] = None,
+                   sector: Optional[str] = None) -> Dict[str, Optional[float]]:
+    """Calcule l'ensemble des ratios à partir d'une fiche fondamentale.
+
+    ``sector`` permet de neutraliser les multiples d'entreprise et le levier
+    pour les banques et assurances. Aucune donnée manquante n'est remplacée par
+    zéro : un EV ou un levier non calculable reste ``None``.
+    """
     price = as_float(price) or as_float(f.get("price"))
     cap = as_float(cap) or as_float(f.get("market_cap"))
     rec = {k: as_float(v) for k, v in f.items() if k in NUMERIC_FIELDS or k in {"market_cap", "bvps", "eps", "fcf_per_share"}}
@@ -299,14 +318,18 @@ def compute_ratios(f: Dict[str, Any], price: Optional[float] = None, cap: Option
     revenue = rec.get("revenue")
     ebitda = rec.get("ebitda")
     equity = rec.get("equity")
-    debt = rec.get("total_debt") or 0.0
-    cash = rec.get("cash") or 0.0
+    debt = rec.get("total_debt")
+    cash = rec.get("cash")
     dps = rec.get("dps")
     bvps = rec.get("bvps") or (safe_div(equity, shares) if shares and equity else None)
     fcf = rec.get("fcf")
     eps = rec.get("eps")
+    financial = is_financial_sector(sector)
 
-    ev = (cap + debt - cash) if cap is not None else None
+    # La dette nette n'est calculée que si la dette ET la trésorerie sont
+    # renseignées : une donnée absente n'est jamais assimilée à zéro.
+    net_debt = (debt - cash) if (debt is not None and cash is not None) else None
+    ev = (cap + net_debt) if (cap is not None and net_debt is not None) else None
 
     ratios: Dict[str, Optional[float]] = {}
     # Les ratios de valorisation ne sont calculés que si le dénominateur est
@@ -328,7 +351,7 @@ def compute_ratios(f: Dict[str, Any], price: Optional[float] = None, cap: Option
     ratios["ebitda_margin"] = safe_div(ebitda, revenue)
     ratios["gross_margin"] = safe_div(rec.get("gross_profit"), revenue)
     ratios["debt_to_equity"] = safe_div(debt, equity)
-    ratios["net_debt_to_ebitda"] = safe_div((debt - cash), ebitda)
+    ratios["net_debt_to_ebitda"] = safe_div(net_debt, ebitda)
     ratios["current_ratio"] = safe_div(rec.get("current_assets"), rec.get("current_liabilities"))
     ratios["interest_coverage"] = safe_div(rec.get("ebit"), rec.get("interest_expense"))
     ratios["fcf_yield"] = safe_div(fcf, cap) if (cap is not None and cap > 0) else None
@@ -338,6 +361,12 @@ def compute_ratios(f: Dict[str, Any], price: Optional[float] = None, cap: Option
     ratios["revenue_growth"] = rec.get("revenue_growth")
     ratios["net_income_growth"] = rec.get("net_income_growth")
     ratios["fcf_growth"] = rec.get("fcf_growth")
+    if financial:
+        # Multiples d'entreprise et levier non pertinents : le bilan d'une
+        # banque n'a pas la même structure qu'un bilan industriel.
+        for key in ("ev_ebitda", "ev_sales", "net_debt_to_ebitda", "debt_to_equity",
+                    "current_ratio", "interest_coverage"):
+            ratios[key] = None
     return {k: (None if v is None or (isinstance(v, float) and v != v) else float(v)) for k, v in ratios.items()}
 
 

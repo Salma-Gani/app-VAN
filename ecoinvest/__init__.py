@@ -12,7 +12,7 @@ ui          : composants, graphiques et pages Streamlit
 
 from __future__ import annotations
 
-__version__ = "3.7.0"
+__version__ = "3.8.0"
 __app_name__ = "MARKET MIND"
 
 __all__ = ["__version__", "__app_name__"]

@@ -49,6 +49,33 @@ class TestRatios(unittest.TestCase):
         self.assertIsNone(r["per"])
         self.assertIsNone(fundamentals.interpret_ratio("per", r["per"])["value"])
 
+    def test_financial_sector_excludes_enterprise_multiples(self) -> None:
+        r = fundamentals.compute_ratios(self.f, price=20.0, sector="Banques")
+        self.assertIsNone(r["ev_ebitda"])
+        self.assertIsNone(r["ev_sales"])
+        self.assertIsNone(r["debt_to_equity"])
+        self.assertIsNone(r["net_debt_to_ebitda"])
+        self.assertIsNone(r["current_ratio"])
+        self.assertIsNone(r["interest_coverage"])
+        # Les ratios de valorisation et de rentabilité restent calculés.
+        self.assertAlmostEqual(r["per"], 2.0)
+        self.assertAlmostEqual(r["roe"], 0.20)
+
+    def test_missing_debt_is_not_zero_filled(self) -> None:
+        f = dict(self.f)
+        f.pop("total_debt")
+        f.pop("cash")
+        r = fundamentals.compute_ratios(f, price=20.0)
+        self.assertIsNone(r["ev_ebitda"])
+        self.assertIsNone(r["debt_to_equity"])
+        self.assertIsNone(r["net_debt_to_ebitda"])
+
+    def test_declared_zero_debt_is_respected(self) -> None:
+        f = dict(self.f, total_debt=0.0, cash=0.0)
+        r = fundamentals.compute_ratios(f, price=20.0)
+        self.assertAlmostEqual(r["ev_ebitda"], 10.0)
+        self.assertAlmostEqual(r["debt_to_equity"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
