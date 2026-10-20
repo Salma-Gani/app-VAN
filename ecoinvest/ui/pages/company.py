@@ -1,6 +1,7 @@
 """Analyse détaillée d'une valeur cotée à la Bourse de Casablanca."""
 from __future__ import annotations
 
+import textwrap
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -515,12 +516,17 @@ def _news_card(item: pd.Series) -> None:
     score = item.get("sentiment") or 0.0
     tone = "up" if score > 0.12 else "down" if score < -0.12 else "flat"
     date = _date(item.get("published"))
-    link = str(item.get("link") or "#")
-    title = html_mod.escape(str(item.get("title") or "Sans titre"))
-    source = html_mod.escape(str(item.get("source") or ""))
-    summary = html_mod.escape(str(item.get("summary") or ""))[:240]
+    def _clean(value: Any, default: str = "") -> str:
+        """Échappe et aplatit une valeur : aucune ligne vide ne doit casser le bloc HTML."""
+        return " ".join(html_mod.escape(str(value or default)).split())
+
+    link = html_mod.escape(str(item.get("link") or "#").strip(), quote=True)
+    title = _clean(item.get("title"), "Sans titre")
+    source = _clean(item.get("source"))
+    summary = _clean(item.get("summary"))[:240]
     st.markdown(
-        f"""
+        textwrap.dedent(
+            f"""
         <div class="ei-card" style="margin-bottom:.6rem">
           <div style="display:flex;justify-content:space-between;gap:1rem;align-items:baseline">
             <a href="{link}" target="_blank" style="font-weight:700;font-size:.98rem;color:{COLORS['text']};text-decoration:none">{title}</a>
@@ -529,7 +535,8 @@ def _news_card(item: pd.Series) -> None:
           <div class="ei-muted" style="font-size:.76rem;margin:.25rem 0">{source} · {date}</div>
           <div class="ei-muted" style="font-size:.82rem;line-height:1.45">{summary}</div>
         </div>
-        """,
+        """
+        ),
         unsafe_allow_html=True,
     )
 

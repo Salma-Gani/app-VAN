@@ -69,7 +69,11 @@ PROVIDERS: List[Provider] = [
              "https://api.deepseek.com/v1", "openai", "https://platform.deepseek.com/"),
     Provider("groq", "Groq", "GROQ_API_KEY", "GROQ_MODEL", "llama-3.3-70b-versatile",
              "https://api.groq.com/openai/v1", "openai", "https://console.groq.com/keys"),
-    Provider("gemini", "Google Gemini", "GEMINI_API_KEY", "GEMINI_MODEL", "gemini-2.0-flash",
+    # Les identifiants de modèles Gemini évoluent vite : ``gemini-2.0-flash`` a été
+    # retiré (404 « no longer available to new users »). L'alias « latest » évite
+    # de coder en dur une version qui sera retirée ; surchargez-le avec GEMINI_MODEL.
+    # Vérifié le 20/10/2026 avec un briefing complet (réponse STOP, texte non vide).
+    Provider("gemini", "Google Gemini", "GEMINI_API_KEY", "GEMINI_MODEL", "gemini-flash-lite-latest",
              "https://generativelanguage.googleapis.com/v1beta", "gemini", "https://aistudio.google.com/apikey"),
     Provider("mistral", "Mistral AI", "MISTRAL_API_KEY", "MISTRAL_MODEL", "mistral-large-latest",
              "https://api.mistral.ai/v1", "openai", "https://console.mistral.ai/"),
@@ -283,18 +287,34 @@ class LLMClient:
         }
         if system:
             body["systemInstruction"] = {"parts": [{"text": system}]}
-        resp = _post(
-            f"{self.provider.base_url.rstrip('/')}/models/{self.model}:generateContent",
-            self.provider.label,
-            params={"key": self.credential},
-            json=body,
-            timeout=90,
-        )
-        data = resp.json()
         try:
-            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        except (KeyError, IndexError, TypeError) as exc:
-            raise LLMError(f"Réponse inattendue de Gemini : {exc}") from exc
+            resp = _post(
+                f"{self.provider.base_url.rstrip('/')}/models/{self.model}:generateContent",
+                self.provider.label,
+                params={"key": self.credential},
+                json=body,
+                timeout=90,
+            )
+        except LLMError as exc:
+            raise LLMError(
+                f"{exc} Modèle demandé : « {self.model} ». Si ce modèle a été retiré par "
+                "Google, choisissez un modèle actif via GEMINI_MODEL (par exemple "
+                "gemini-flash-lite-latest)."
+            ) from exc
+        data = resp.json()
+        candidates = data.get("candidates") or []
+        if not candidates:
+            blocked = (data.get("promptFeedback") or {}).get("blockReason")
+            if blocked:
+                raise LLMError(f"Gemini a bloqué la requête ({blocked}).")
+            raise LLMError("Gemini n'a renvoyé aucun candidat exploitable.")
+        content = candidates[0].get("content") or {}
+        parts = content.get("parts") or []
+        text = "".join(str(part.get("text") or "") for part in parts if isinstance(part, dict))
+        if not text.strip():
+            reason = candidates[0].get("finishReason") or "sans texte"
+            raise LLMError(f"Gemini n'a renvoyé aucun texte exploitable ({reason}).")
+        return text.strip()
 
     def _ollama(self, messages, system, temperature, max_tokens) -> str:
         payload_messages = ([{"role": "system", "content": system}] if system else []) + messages

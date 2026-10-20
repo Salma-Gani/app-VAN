@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+import textwrap
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -195,21 +196,26 @@ def _render_alerts(alerts: List[alerts_mod.Alert]) -> None:
         color = COLORS["danger"] if alert.severity == "critical" else (
             COLORS["warning"] if alert.severity == "warning" else COLORS["accent"]
         )
-        details = html.escape(alert.detail)
-        source = html.escape(" · ".join(p for p in (alert.source, alert.as_of) if p))
+        def _clean(value: Any) -> str:
+            return " ".join(html.escape(str(value or "")).split())
+
+        details = _clean(alert.detail)
+        source = _clean(" · ".join(p for p in (alert.source, alert.as_of) if p))
         st.markdown(
-            f"""
+            textwrap.dedent(
+                f"""
             <div class="ei-card" style="border-left:4px solid {color};margin-bottom:.55rem">
               <div style="display:flex;justify-content:space-between;gap:1rem;align-items:baseline">
-                <div><b>{html.escape(alert.symbol)}</b>
-                  <span class="ei-muted" style="font-size:.8rem">— {html.escape(alert.name)}</span></div>
+                <div><b>{_clean(alert.symbol)}</b>
+                  <span class="ei-muted" style="font-size:.8rem">— {_clean(alert.name)}</span></div>
                 {ui.badge(_LABEL.get(alert.severity, alert.severity), tone)}
               </div>
-              <div style="font-weight:700;margin:.2rem 0">{html.escape(alert.title)}</div>
+              <div style="font-weight:700;margin:.2rem 0">{_clean(alert.title)}</div>
               <div class="ei-muted" style="font-size:.84rem;line-height:1.45">{details}</div>
               <div class="ei-muted" style="font-size:.72rem;margin-top:.3rem">{source}</div>
             </div>
-            """,
+            """
+            ),
             unsafe_allow_html=True,
         )
 
@@ -263,15 +269,17 @@ def _theses_panel(table: pd.DataFrame) -> None:
             COLORS["warning"] if status in ("stale", "invalid") else COLORS["accent"]
         )
         metric_change = item.get("metric_change")
+        metric_label = " ".join(str(item.get("metric_label") or "—").split())
+        source_text = " ".join(html.escape(str(item.get("source") or "—")).split())
         body = (
             f"Cours actuel **{fmt_num(item.get('current_price'), 2)} MAD** · "
             f"prix d'entrée **{fmt_num(item.get('entry_price'), 2)} MAD** "
             f"({fmt_pct(item.get('distance_entry'), 1, signed=True)} d'écart) · "
             f"prix théorique **{fmt_num(item.get('target_price'), 2)} MAD**.<br>"
-            f"Métrique suivie : {item.get('metric_label')} = {fmt_num(item.get('metric_value'), 2)} "
+            f"Métrique suivie : {metric_label} = {fmt_num(item.get('metric_value'), 2)} "
             f"→ actuelle {fmt_num(item.get('current_metric'), 2)}"
             + (f" ({fmt_pct(metric_change, 2, signed=True)})" if metric_change is not None else "")
-            + f".<br><span class='ei-muted'>Source : {html.escape(str(item.get('source') or '—'))} · "
+            + f".<br><span class='ei-muted'>Source : {source_text} · "
             f"exercice {item.get('fiscal_year')} · maj {item.get('as_of') or '—'}</span>"
         )
         if item.get("needs_recalc"):
@@ -280,9 +288,11 @@ def _theses_panel(table: pd.DataFrame) -> None:
                 "a changé depuis la création de la thèse. Le prix d'entrée doit être recalculé."
             )
         if item.get("notes"):
-            body += f"<br><span class='ei-muted'>Note : {html.escape(str(item['notes']))}</span>"
+            notes = " ".join(html.escape(str(item["notes"])).split())
+            body += f"<br><span class='ei-muted'>Note : {notes}</span>"
         st.markdown(
-            f"""
+            textwrap.dedent(
+                f"""
             <div class="ei-card" style="border-left:4px solid {color};margin-bottom:.55rem">
               <div style="display:flex;justify-content:space-between;gap:1rem;align-items:baseline">
                 <div><b>{html.escape(str(item.get('symbol')))}</b>
@@ -291,7 +301,8 @@ def _theses_panel(table: pd.DataFrame) -> None:
               </div>
               <div class="ei-muted" style="font-size:.84rem;line-height:1.55;margin-top:.3rem">{body}</div>
             </div>
-            """,
+            """
+            ),
             unsafe_allow_html=True,
         )
         if st.button("🗑️ Supprimer cette thèse", key=f"del_thesis_{item.get('id')}"):

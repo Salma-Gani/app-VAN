@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html as html_mod
+import textwrap
 from typing import Any, List
 
 import pandas as pd
@@ -246,7 +247,7 @@ def _fmt_datetime(value: Any) -> Any:
 
 def _card(item: pd.Series) -> None:
     score = item.get("sentiment") or 0.0
-    label = str(item.get("sentiment_label") or "Neutre")
+    label = " ".join(str(item.get("sentiment_label") or "Neutre").split())
     badge_class, border_color = _SENTIMENT_STYLE.get(label, ("ei-tone-neu", "#64748B"))
     published = _fmt_datetime(item.get("published"))
     fetched = _fmt_datetime(item.get("fetched_at"))
@@ -259,20 +260,25 @@ def _card(item: pd.Series) -> None:
         dates.append(f"récupéré le {fetched}")
     date = " · ".join(dates)
 
-    link = str(item.get("link") or "#")
-    title = html_mod.escape(str(item.get("title") or "Sans titre"))
-    source = html_mod.escape(str(item.get("source") or ""))
-    scope = html_mod.escape(str(item.get("scope") or ""))
-    summary = html_mod.escape(str(item.get("summary") or ""))
+    def _clean(value: Any, default: str = "") -> str:
+        """Échappe et aplatit une valeur : aucune ligne vide ne doit casser le bloc HTML."""
+        return " ".join(html_mod.escape(str(value or default)).split())
+
+    link = html_mod.escape(str(item.get("link") or "#").strip(), quote=True)
+    title = _clean(item.get("title"), "Sans titre")
+    source = _clean(item.get("source"))
+    scope = _clean(item.get("scope"))
+    summary = _clean(item.get("summary"))
     summary = summary[:300] + ("…" if len(summary) > 300 else "")
-    category = html_mod.escape(str(item.get("category") or ""))
-    impact = html_mod.escape(str(item.get("impact_level") or ""))
-    reason = html_mod.escape(str(item.get("impact_reason") or ""))
-    held = html_mod.escape(str(item.get("held") or ""))
+    category = _clean(item.get("category"))
+    impact = _clean(item.get("impact_level"))
+    reason = _clean(item.get("impact_reason"))
+    held = _clean(item.get("held"))
     impact_tone = {"Élevé": "ei-tone-neg", "Moyen": "ei-warn"}.get(impact, "ei-tone-neu")
 
     st.markdown(
-        f"""
+        textwrap.dedent(
+            f"""
         <div class="ei-card" style="margin-bottom:.65rem;border-left:4px solid {border_color}">
           <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start">
             <a href="{link}" target="_blank" rel="noopener"
@@ -291,6 +297,7 @@ def _card(item: pd.Series) -> None:
           </div>
           <div class="ei-muted" style="font-size:.83rem;line-height:1.5">{summary}</div>
         </div>
-        """,
+        """
+        ),
         unsafe_allow_html=True,
     )
