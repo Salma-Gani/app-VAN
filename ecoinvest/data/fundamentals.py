@@ -25,6 +25,7 @@ import pandas as pd
 from ..config import SEED_DIR, TTL, USER_FUNDAMENTALS_FILE
 from ..utils import cache
 from ..utils.formatting import as_float, safe_div
+from .http import record_exception
 
 NS = "fundamentals"
 STORE_SEED = SEED_DIR / "bvc_fundamentals.json"
@@ -211,7 +212,8 @@ def market_reference(force: bool = False) -> Dict[str, Dict[str, Any]]:
         from . import bvc
 
         ref = bvc.reference_data(force=force)
-    except Exception:
+    except Exception as exc:
+        record_exception("Référentiel BVC", exc)
         ref = {}
     cache.set(NS, key, ref)
     return ref

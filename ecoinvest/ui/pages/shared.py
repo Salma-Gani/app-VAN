@@ -161,9 +161,8 @@ def fx_rates() -> Dict[str, float]:
     try:
         return market.fx_rates()
     except Exception:
-        from ...config import FX_FALLBACK
-
-        return dict(FX_FALLBACK)
+        # Aucun taux inventé : seul MAD est certain.
+        return {"MAD": 1.0}
 
 
 @st.cache_data(ttl=600, **CACHE_KW)

@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from ...analytics import forecast
-from ...config import COLORS, INFLATION_RATE
+from ...config import BROKERAGE_FEE, COLORS, INFLATION_RATE
 from ...portfolio import optimize, simulate
 from ...utils.formatting import fmt_money, fmt_num, fmt_pct
 from .. import charts, components as ui
@@ -89,9 +89,18 @@ def _inputs(profile: Any) -> Dict[str, Any]:
         st.metric("Rendement réel attendu", fmt_pct((1 + expected) / (1 + INFLATION_RATE) - 1, 1))
         st.caption(f"Inflation retenue : {INFLATION_RATE:.1%} · fiscalité TPCVM 15 %")
 
+    c8, c9 = st.columns(2)
+    with c8:
+        contribution_fee = st.slider(
+            "Frais par versement (%)", 0.0, 3.0, float(round(BROKERAGE_FEE * 100, 2)), 0.05
+        ) / 100.0
+    with c9:
+        annual_fee = st.slider("Frais annuels de gestion (%)", 0.0, 3.0, 0.0, 0.05) / 100.0
+
     return {
         "initial": initial, "monthly": monthly, "years": years,
         "target": target, "expected": expected, "volatility": volatility,
+        "contribution_fee": contribution_fee, "annual_fee": annual_fee,
     }
 
 
@@ -100,7 +109,8 @@ def _inputs(profile: Any) -> Dict[str, Any]:
 
 def _headline(params: Dict[str, Any]) -> None:
     projection = forecast.projection_table(
-        params["initial"], params["monthly"], params["expected"], params["years"]
+        params["initial"], params["monthly"], params["expected"], params["years"],
+        annual_fee=params["annual_fee"], contribution_fee=params["contribution_fee"],
     )
     final = projection.iloc[-1]
     invested = float(final["Versements cumulés"])
@@ -167,11 +177,13 @@ def _headline(params: Dict[str, Any]) -> None:
 def _monte_carlo(params: Dict[str, Any]) -> None:
     ui.section(
         "Distribution des résultats",
-        "2 000 trajectoires simulées : la médiane, la fourchette 10–90 % et le risque de perte.",
+        "2 000 trajectoires simulées : la médiane, la fourchette 10–90 % et le risque de perte. "
+        "Frais par versement et frais annuels déduits.",
     )
     result = forecast.portfolio_fan_chart(
         params["initial"], params["monthly"], params["expected"], params["volatility"],
         years=params["years"], n_sims=2000,
+        annual_fee=params["annual_fee"], contribution_fee=params["contribution_fee"],
     )
     ui.kpi_row(
         [
@@ -182,16 +194,36 @@ def _monte_carlo(params: Dict[str, Any]) -> None:
             {"label": "Scénario favorable (90 %)", "value": fmt_money(result["final_p90"], "MAD", compact=True),
              "sub": "1 chance sur 10 de faire mieux", "tone": "up"},
             {"label": "Total versé", "value": fmt_money(result["total_invested"], "MAD", compact=True),
-             "sub": "capital + versements", "tone": "blue"},
+             "sub": "capital + versements bruts", "tone": "blue"},
             {"label": "Probabilité de perte", "value": fmt_pct(result["prob_loss"], 1),
              "sub": "valeur finale < versements", "tone": "warn" if result["prob_loss"] < 0.3 else "down"},
         ],
         per_row=5,
     )
     prob_target = float((result["final"] >= params["target"]).mean()) if params["target"] else None
+    benchmark_stats, benchmark_path = _benchmark_reference(params, result["months"])
+    benchmark_label = (
+        f"MASI historique ({benchmark_stats['cagr']:.1%}/an)"
+        if benchmark_stats else "Référence"
+    )
     fig = charts.fan_chart(result["months"], result["percentiles"], invested=result["invested"],
-                           target=params["target"] if params["target"] else None, height=460)
+                           target=params["target"] if params["target"] else None, height=460,
+                           benchmark=benchmark_path, benchmark_label=benchmark_label)
     ui.plot(fig, key="sim_fan")
+    if benchmark_stats:
+        ui.note(
+            f"Référence MASI : **{benchmark_stats['cagr']:.2%} annualisé** sur "
+            f"{benchmark_stats['years']:.1f} ans ({benchmark_stats['start']} → {benchmark_stats['end']}), "
+            f"volatilité observée {benchmark_stats['volatility']:.1%}. La ligne pointillée applique ce rythme "
+            "historique aux mêmes versements. Un historique n'est pas une prévision.",
+            "info", "📈",
+        )
+    else:
+        ui.note(
+            "Historique MASI indisponible : aucune référence de marché n'est affichée "
+            "(aucune performance n'est inventée).",
+            "warn", "⚠️",
+        )
     if prob_target is not None:
         ui.note(
             f"Probabilité d'atteindre l'objectif de {fmt_money(params['target'], 'MAD', compact=True)} : "
@@ -199,6 +231,30 @@ def _monte_carlo(params: Dict[str, Any]) -> None:
             "up" if prob_target >= 0.6 else "warn" if prob_target >= 0.3 else "down",
             "🎯",
         )
+
+
+def _benchmark_reference(params: Dict[str, Any], months) -> tuple:
+    """Trajectoire de référence fondée sur l'historique réel du MASI."""
+    try:
+        history = shared.index_history("MASI", period="5Y")
+    except Exception as exc:
+        st.caption(f"Historique MASI indisponible : {exc.__class__.__name__}.")
+        return {}, None
+    stats = forecast.annualized_stats(history)
+    if not stats:
+        return {}, None
+    net_annual = (1 + stats["cagr"]) * (1 - params["annual_fee"]) - 1
+    monthly_rate = (1 + net_annual) ** (1 / 12) - 1
+    net_monthly = params["monthly"] * (1 - params["contribution_fee"])
+    path = []
+    for month in months:
+        growth = (1 + monthly_rate) ** int(month)
+        if abs(monthly_rate) > 1e-12:
+            annuity = (growth - 1) / monthly_rate
+        else:
+            annuity = int(month)
+        path.append(params["initial"] * growth + net_monthly * annuity)
+    return stats, path
 
 
 # ═══════════════════════════ Comparaison ═══════════════════════════

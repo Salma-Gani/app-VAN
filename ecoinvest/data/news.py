@@ -18,7 +18,7 @@ import requests
 
 from ..config import HTTP_HEADERS, HTTP_TIMEOUT, TTL
 from ..utils import cache
-from .http import ProviderError, classify_status, record_error, record_success
+from .http import ProviderError, classify_status, record_error, record_exception, record_success
 
 NS = "news"
 
@@ -47,7 +47,7 @@ POSITIVE = {
     "croît", "croit", "amélioration", "amelioration", "relève", "releve", "résultats solides",
     "acquisition", "partenariat", "développement", "developpement", "excellente", "surcote",
     "surperformance", "hausses", "rallye", "confiance", "solide", "inflation ralentit",
-    "baisse des taux", "stimulus", "soutien", "florissant", "dinamisme", "dynamisme",
+    "baisse des taux", "stimulus", "soutien", "florissant", "dynamisme",
     "beats", "beat", "upgrade", "outperform", "growth", "profit", "rally", "surge",
     "jumps", "record high", "strong", "bullish", "raises", "expansion", "deal",
 }
@@ -178,11 +178,13 @@ def fetch_all_news(max_age_days: int = 14, force: bool = False) -> pd.DataFrame:
 
     collected: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(_fetch_source, s) for s in SOURCES]
+        futures = {pool.submit(_fetch_source, s): s for s in SOURCES}
         for fut in as_completed(futures):
+            source = futures[fut]
             try:
                 collected.extend(fut.result())
-            except Exception:
+            except Exception as exc:
+                record_exception(f"Actualités · {source.get('name') or source.get('url')}", exc)
                 continue
 
     df = pd.DataFrame(collected)
@@ -283,7 +285,7 @@ def sentiment_label(score: Optional[float]) -> str:
 
 CATEGORY_RULES: List[tuple] = [
     ("Dividendes", ("dividende", "dividend", "coupon")),
-    ("Résultats", ("résultat", "resultat", "bénéfice", "bienefice", "chiffre d'affaires",
+    ("Résultats", ("résultat", "resultat", "bénéfice", "chiffre d'affaires",
                    "ebitda", "earnings", "profit", "revenus", "profit warning")),
     ("Opérations sur titres", ("augmentation de capital", "fusion", "acquisition", "opa",
                                "apport", "cession", "merger", "opération sur titres")),

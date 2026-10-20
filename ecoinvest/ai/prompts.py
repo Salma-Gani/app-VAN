@@ -6,6 +6,18 @@ from typing import Any, Dict, List, Optional
 from ..config import CAPITAL_GAINS_TAX, DIVIDEND_TAX, RISK_FREE_RATE
 from ..utils.formatting import fmt_money, fmt_multiple, fmt_num, fmt_pct
 
+_FUNDAMENTAL_LABELS: Dict[str, str] = {
+    "revenue": "Chiffre d'affaires",
+    "net_income": "Résultat net",
+    "ebitda": "EBITDA",
+    "fcf": "Free cash-flow",
+    "equity": "Capitaux propres",
+    "total_debt": "Dette totale",
+    "cash": "Trésorerie",
+    "dps": "Dividende par action",
+    "eps": "Résultat par action",
+}
+
 BASE_RULES = f"""
 RÈGLES ABSOLUES
 1. Tu analyses des données RÉELLES fournies dans le contexte. Tu n'inventes JAMAIS un chiffre.
@@ -178,7 +190,10 @@ def company_context(symbol: str, row: Dict[str, Any], technical: Dict[str, Any],
     if usable_ratios:
         lines.append("\n### RATIOS FONDAMENTAUX DISPONIBLES")
         for key, info in usable_ratios.items():
-            lines.append(f"- {info.get('label')} = {_fmt(info.get('value'))} → {info.get('grade')} : {info.get('text')}")
+            lines.append(
+                f"- {info.get('label')} : {_fmt(info.get('value'))} "
+                f"(appréciation « {info.get('grade')} » — {info.get('text')})"
+            )
     else:
         lines.append("\n### RATIOS FONDAMENTAUX\n- Aucune donnée fondamentale exploitable pour cette valeur "
                      "(utilisez l'onglet « Données fondamentales »). L'analyse est donc technique et de marché.")
@@ -188,7 +203,7 @@ def company_context(symbol: str, row: Dict[str, Any], technical: Dict[str, Any],
         if extra:
             lines.append("### ÉTATS FINANCIERS SAISIS")
             for k, v in extra.items():
-                lines.append(f"- {k} = {_fmt(v, 'money')}")
+                lines.append(f"- {_FUNDAMENTAL_LABELS.get(k, k)} : {_fmt(v, 'money')}")
     if news_items:
         lines.append("\n### ACTUALITÉS RÉCENTES")
         for item in news_items[:6]:

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -18,6 +19,31 @@ import requests
 
 from ..config import HTTP_TIMEOUT, USER_AI_FILE
 from ..data.http import ProviderError, classify_status, record_error, record_success
+
+# ═══════════════════════════ Garde-fou éditorial ═══════════════════════════
+
+# Fragments techniques qui ne doivent jamais apparaître comme du texte
+# éditorial : artefacts « clé = valeur » issus du contexte, ou tournures
+# corrompues du type « 10 classe est égale à EI ».
+_BROKEN_PHRASE = re.compile(r"[^.\n]*\bclasse\s+est\s+égale\s+à\b[^.\n]*\.?", re.IGNORECASE)
+_TECH_ASSIGNMENT = re.compile(r"^\s*[a-z][a-z0-9]*(?:_[a-z0-9]+)+\s*=\s*.{0,60}$", re.MULTILINE)
+
+
+def sanitize_llm_text(text: Optional[str]) -> str:
+    """Retire les artefacts techniques d'une réponse LLM, sans la réécrire.
+
+    Seules les tournures manifestement corrompues sont supprimées ; le contenu
+    financier rédigé est conservé tel quel. Si le nettoyage vide la réponse,
+    un message explicite remplace le texte plutôt que de laisser un blanc.
+    """
+    if not text:
+        return ""
+    cleaned = _BROKEN_PHRASE.sub("", text)
+    cleaned = _TECH_ASSIGNMENT.sub("", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    if not cleaned:
+        return "Réponse du fournisseur retirée : elle contenait uniquement des fragments techniques illisibles."
+    return cleaned
 
 # ═══════════════════════════ Définition des fournisseurs ═══════════════════════════
 
@@ -189,12 +215,14 @@ class LLMClient:
     ) -> str:
         style = self.provider.style
         if style == "anthropic":
-            return self._anthropic(messages, system, temperature, max_tokens)
-        if style == "gemini":
-            return self._gemini(messages, system, temperature, max_tokens)
-        if style == "ollama":
-            return self._ollama(messages, system, temperature, max_tokens)
-        return self._openai_compatible(messages, system, temperature, max_tokens)
+            text = self._anthropic(messages, system, temperature, max_tokens)
+        elif style == "gemini":
+            text = self._gemini(messages, system, temperature, max_tokens)
+        elif style == "ollama":
+            text = self._ollama(messages, system, temperature, max_tokens)
+        else:
+            text = self._openai_compatible(messages, system, temperature, max_tokens)
+        return sanitize_llm_text(text)
 
     # ─── Implémentations ───
     def _openai_compatible(self, messages, system, temperature, max_tokens) -> str:

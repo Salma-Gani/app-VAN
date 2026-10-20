@@ -664,6 +664,8 @@ def fan_chart(
     target: Optional[float] = None,
     height: int = 480,
     title: str = "Projection Monte-Carlo du patrimoine",
+    benchmark: Optional[Sequence[float]] = None,
+    benchmark_label: str = "Référence",
 ) -> go.Figure:
     fig = go.Figure()
     order = [("p10", "rgba(141,162,192,.06)"), ("p25", "rgba(91,141,239,.10)"),
@@ -686,6 +688,9 @@ def fan_chart(
     if invested is not None:
         fig.add_trace(go.Scatter(x=list(months), y=list(invested), name="Capital versé",
                                  line=dict(color=C["warning"], width=2, dash="dash")))
+    if benchmark is not None:
+        fig.add_trace(go.Scatter(x=list(months), y=list(benchmark), name=benchmark_label,
+                                 line=dict(color=C["muted"], width=2, dash="dot")))
     if target:
         fig.add_hline(y=target, line_dash="dot", line_color=C["accent2"],
                       annotation_text="Objectif", annotation_font_color=C["accent2"])

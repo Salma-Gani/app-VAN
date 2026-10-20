@@ -35,7 +35,7 @@ from ..config import (
     TTL,
 )
 from ..utils import cache
-from .http import ProviderError, classify_status, record_error, record_success
+from .http import ProviderError, classify_status, record_error, record_exception, record_success
 
 # ═══════════════════════════ Noms de cache ═══════════════════════════
 NS_API = "bvc_api"
@@ -152,8 +152,8 @@ def fetch_universe_live() -> List[Dict[str, str]]:
                         fh, ensure_ascii=False, indent=1,
                     )
                 return parsed
-    except requests.RequestException:
-        pass
+    except requests.RequestException as exc:
+        record_exception("Bourse de Casablanca (univers)", exc)
     return []
 
 
@@ -388,7 +388,7 @@ _FALLBACK_UNIVERSE: List[tuple] = [
     ("MNG", "Managem"), ("TMA", "Totalenergies Marketing Maroc"), ("LBV", "Label Vie"),
     ("MSA", "Sodep-Marsa Maroc"), ("AKT", "Akdital"), ("CIH", "CIH"), ("SID", "Sonasid"),
     ("TQM", "Taqa Morocco"), ("GAZ", "Afriquia Gaz"), ("WAA", "Wafa Assurance"),
-    ("SID", "Sonasid"), ("HPS", "HPS"), ("SOT", "Sothema"), ("RIS", "Risma"),
+    ("HPS", "HPS"), ("SOT", "Sothema"), ("RIS", "Risma"),
     ("MUT", "Mutandis SCA"), ("LES", "Lesieur Cristal"), ("OUL", "Oulmes"),
     ("SBM", "Societe Des Boissons Du Maroc"), ("CTM", "CTM"), ("TGC", "TGCC S.A"),
     ("ADI", "Alliances"), ("NKL", "Ennakl"), ("SAH", "Sanlam Maroc"),
@@ -406,8 +406,8 @@ _FALLBACK_UNIVERSE: List[tuple] = [
     ("MOX", "Maghreb Oxygene"), ("UMR", "Unimer"), ("IBC", "Ib Maroc.Com"),
     ("BCI", "BMCI"), ("STR", "Stroc Industrie"), ("JET", "Jet Contractors"),
     ("AFI", "Afric Industries Sa"), ("S2M", "S.M Monetique"), ("RDS", "Residences Dar Saada"),
-    ("MCS", "Mcs"), ("IMO", "Immorente Invest"), ("REB", "Rebab Company"),
-    ("SAM", "Samir"), ("SID", "Sonasid"), ("CMG", "CMGP Group"),
+    ("MCS", "Mcs"), ("REB", "Rebab Company"),
+    ("SAM", "Samir"), ("CMG", "CMGP Group"),
 ]
 
 

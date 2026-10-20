@@ -10,8 +10,9 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
 
-from ..config import FX_FALLBACK, FX_TICKERS, GLOBAL_INDICES, TTL
+from ..config import FX_TICKERS, GLOBAL_INDICES, TTL
 from ..utils import cache
+from .http import record_exception
 
 NS = "market_global"
 
@@ -45,7 +46,8 @@ def _download(tickers: Sequence[str], period: str = "1y", interval: str = "1d") 
             group_by="column",
         )
         return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
-    except Exception:
+    except Exception as exc:
+        record_exception("Yahoo Finance", exc)
         return pd.DataFrame()
 
 
@@ -233,11 +235,12 @@ def fx_rates(force: bool = False) -> Dict[str, float]:
     for cur, ticker in FX_TICKERS.items():
         try:
             s = closes[ticker].dropna()
-            rates[cur] = float(s.iloc[-1]) if not s.empty else FX_FALLBACK[cur]
         except (KeyError, IndexError):
-            rates[cur] = FX_FALLBACK[cur]
-    for cur, val in FX_FALLBACK.items():
-        rates.setdefault(cur, val)
+            continue
+        if not s.empty:
+            rates[cur] = float(s.iloc[-1])
+    # MAD = 1.0 est la seule valeur certaine ; aucune devise n'est estimée à
+    # défaut. Une devise absente restera introuvable côté affichage.
     cache.set(NS, key, rates)
     return rates
 

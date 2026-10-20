@@ -6,6 +6,12 @@ from __future__ import annotations
 
 import streamlit as st
 
+# Préchargement explicite : évite une course d'imports lorsque deux sessions
+# Streamlit démarrent en même temps (Python 3.9), qui produisait
+# « partially initialized module 'pandas' has no attribute 'Series' ».
+import pandas  # noqa: F401
+import plotly.graph_objects  # noqa: F401
+
 from ecoinvest import theme
 from ecoinvest.config import APP_ICON, APP_NAME, VERSION
 

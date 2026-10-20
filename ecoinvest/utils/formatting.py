@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from ..config import CURRENCIES, FX_FALLBACK
+from ..config import CURRENCIES
 
 
 def _clean(x: str) -> str:
@@ -106,17 +106,18 @@ def fmt_volume(x: Optional[float]) -> str:
 
 
 def convert_from_mad(amount: Optional[float], currency: str, fx_mad_per_unit: Optional[dict] = None) -> Optional[float]:
-    """Convertit un montant en MAD vers la devise cible."""
+    """Convertit un montant en MAD vers la devise cible.
+
+    Retourne ``None`` si le taux réel n'est pas disponible : aucun taux n'est
+    inventé (pas de repli forfaitaire présenté comme réel).
+    """
     if amount is None:
         return None
     if currency == "MAD":
         return float(amount)
-    rates = dict(FX_FALLBACK)
-    if fx_mad_per_unit:
-        rates.update({k: v for k, v in fx_mad_per_unit.items() if v})
-    rate = rates.get(currency)
+    rate = (fx_mad_per_unit or {}).get(currency)
     if not rate:
-        return float(amount)
+        return None
     return float(amount) / float(rate)
 
 
@@ -125,12 +126,9 @@ def convert_to_mad(amount: Optional[float], currency: str, fx_mad_per_unit: Opti
         return None
     if currency == "MAD":
         return float(amount)
-    rates = dict(FX_FALLBACK)
-    if fx_mad_per_unit:
-        rates.update({k: v for k, v in fx_mad_per_unit.items() if v})
-    rate = rates.get(currency)
+    rate = (fx_mad_per_unit or {}).get(currency)
     if not rate:
-        return float(amount)
+        return None
     return float(amount) * float(rate)
 
 

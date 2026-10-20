@@ -170,6 +170,22 @@ def state_for(provider: str) -> Optional[Dict[str, Any]]:
         return dict(item) if item else None
 
 
+def record_exception(provider: str, error: BaseException) -> ProviderError:
+    """Enregistre une exception silencieuse sans la masquer au diagnostic.
+
+    Utilisé par les connecteurs qui préfèrent renvoyer une valeur vide plutôt
+    que d'interrompre la page. L'erreur reste consultable dans ``diagnostics()``.
+    """
+    if isinstance(error, ProviderError):
+        wrapped = error
+    else:
+        kind = "timeout" if isinstance(error, TimeoutError) else "network"
+        message = f"{error.__class__.__name__}: {error}"
+        wrapped = ProviderError(provider, kind=kind, message=message)
+    record_error(provider, wrapped)
+    return wrapped
+
+
 def diagnostics() -> List[Dict[str, Any]]:
     with _LOCK:
         return [dict(v) for v in sorted(_STATE.values(), key=lambda d: d.get("provider", ""))]

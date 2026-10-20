@@ -350,18 +350,27 @@ def portfolio_fan_chart(
     years: int = 10,
     n_sims: int = 2000,
     seed: int = 3,
+    annual_fee: float = 0.0,
+    contribution_fee: float = 0.0,
 ) -> Dict[str, Any]:
-    """Trajectoires Monte-Carlo d'un portefeuille (éventail de percentiles)."""
+    """Trajectoires Monte-Carlo d'un portefeuille (éventail de percentiles).
+
+    ``annual_fee`` (fraction) réduit le rendement attendu chaque année ;
+    ``contribution_fee`` (fraction) est prélevée sur chaque versement. Les frais
+    sont donc visibles dans l'écart entre le capital versé et les trajectoires.
+    """
     rng = np.random.default_rng(seed)
     months = years * 12
-    monthly_mu = (1 + expected_return) ** (1 / 12) - 1
+    net_annual = (1 + expected_return) * (1 - max(0.0, annual_fee)) - 1
+    monthly_mu = (1 + net_annual) ** (1 / 12) - 1
     monthly_sigma = volatility / np.sqrt(12)
+    net_monthly = float(monthly) * (1 - max(0.0, contribution_fee))
 
     shocks = rng.normal(monthly_mu, monthly_sigma, size=(n_sims, months))
     paths = np.zeros((n_sims, months + 1))
     paths[:, 0] = float(initial)
     for m in range(months):
-        paths[:, m + 1] = paths[:, m] * (1 + shocks[:, m]) + float(monthly)
+        paths[:, m + 1] = paths[:, m] * (1 + shocks[:, m]) + net_monthly
     # Croissance composée du versement (approximation discrète mensuelle)
 
     percentiles = {
@@ -387,6 +396,55 @@ def portfolio_fan_chart(
         "total_invested": float(invested[-1]),
         "prob_loss": float((paths[:, -1] < invested[-1]).mean()),
         "prob_target": None,
+        "net_annual_return": net_annual,
+        "net_monthly": net_monthly,
+    }
+
+
+def annualized_stats(
+    frame: Optional[pd.DataFrame],
+    value_col: str = "value",
+    date_col: str = "date",
+) -> Dict[str, Any]:
+    """Rendement annualisé et volatilité observés sur une série réelle.
+
+    Aucune valeur n'est estimée : si l'historique est trop court, un dict vide
+    est renvoyé. La fréquence est déduite de l'écart médian entre observations.
+    """
+    if frame is None or not isinstance(frame, pd.DataFrame) or frame.empty:
+        return {}
+    if value_col not in frame.columns or date_col not in frame.columns:
+        return {}
+    data = frame[[date_col, value_col]].copy()
+    data[date_col] = pd.to_datetime(data[date_col], errors="coerce")
+    data[value_col] = pd.to_numeric(data[value_col], errors="coerce")
+    data = data.dropna().sort_values(date_col).drop_duplicates(date_col)
+    if len(data) < 20:
+        return {}
+    values = data[value_col].astype(float)
+    if (values <= 0).any():
+        return {}
+    span_days = (data[date_col].iloc[-1] - data[date_col].iloc[0]).days
+    if span_days < 60:
+        return {}
+    years = span_days / 365.25
+    growth = values.iloc[-1] / values.iloc[0]
+    if growth <= 0:
+        return {}
+    cagr = growth ** (1 / years) - 1
+    returns = values.pct_change().dropna()
+    median_gap = data[date_col].diff().dt.days.median()
+    periods_per_year = 252.0 if median_gap <= 2 else 52.0 if median_gap <= 9 else 12.0
+    volatility = float(returns.std() * np.sqrt(periods_per_year)) if len(returns) > 1 else 0.0
+    return {
+        "cagr": float(cagr),
+        "volatility": volatility,
+        "years": float(years),
+        "observations": int(len(data)),
+        "start": data[date_col].iloc[0].date().isoformat(),
+        "end": data[date_col].iloc[-1].date().isoformat(),
+        "start_value": float(values.iloc[0]),
+        "end_value": float(values.iloc[-1]),
     }
 
 
@@ -396,13 +454,21 @@ def projection_table(
     annual_return: float,
     years: int = 10,
     inflation: float = 0.02,
+    annual_fee: float = 0.0,
+    contribution_fee: float = 0.0,
 ) -> pd.DataFrame:
-    """Tableau de projection annuelle : capital, versements cumulés, gain, valeur réelle."""
+    """Tableau de projection annuelle : capital, versements cumulés, gain, valeur réelle.
+
+    Les frais réduisent le rendement et chaque versement ; le capital versé
+    affiché reste le montant brut effectivement payé par l'investisseur.
+    """
+    net_return = (1 + annual_return) * (1 - max(0.0, annual_fee)) - 1
+    net_monthly = float(monthly) * (1 - max(0.0, contribution_fee))
     rows = []
     total_invested = float(initial)
     for y in range(1, years + 1):
         total_invested += float(monthly) * 12
-        fv = finance.future_value(initial, monthly, annual_return, y)
+        fv = finance.future_value(initial, net_monthly, net_return, y)
         gain = fv - total_invested
         rows.append(
             {

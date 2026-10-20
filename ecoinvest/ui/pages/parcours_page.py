@@ -162,7 +162,7 @@ def _context(symbol: str, row: pd.Series, f: Dict[str, Any],
     price = as_float(row.get("close")) or as_float(f.get("price"))
     change = as_float(row.get("change_pct"))
     summary = shared.technical_summary(symbol)
-    trend = (summary.get("trend") or {}).get("label") if summary else None
+    trend = (summary.get("trend") or {}).get("state") if summary else None
 
     # Actualités liées (recherche simple par symbole / nom)
     news_count = 0

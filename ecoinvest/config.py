@@ -9,7 +9,7 @@ APP_NAME = "MARKET MIND"
 APP_TAGLINE = "Investment intelligence platform"
 APP_SUBTITLE = "Votre capital. Votre stratégie. Une vision plus claire."
 APP_ICON = "🧭"
-VERSION = "3.6.0"
+VERSION = "3.7.0"
 
 # ═══════════════════════════ Chemins ═══════════════════════════
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,6 +29,8 @@ USER_STATEMENTS_FILE = USER_DIR / "statements.json"
 USER_THESES_FILE = USER_DIR / "theses.json"
 USER_AI_FILE = USER_DIR / "ai_config.json"
 WATCHLIST_FILE = USER_DIR / "watchlist.json"
+USER_LEDGER_FILE = USER_DIR / "transactions.json"
+USER_SIM_FILE = USER_DIR / "simulations.json"
 STATEMENTS_SEED = SEED_DIR / "bvc_statements.json"
 
 
@@ -122,7 +124,9 @@ PALETTE = [
 DEFAULT_CURRENCY = "MAD"
 CURRENCIES = ["MAD", "EUR", "USD"]
 
-# Taux de change de secours : combien de MAD pour 1 unité de devise
+# Taux de change de SECOURS — valeurs d'ordre indicatif, **jamais** utilisées
+# comme données réelles. L'application n'affiche un taux que s'il provient d'une
+# source live ; sinon la conversion est déclarée indisponible.
 FX_FALLBACK = {"MAD": 1.0, "EUR": 10.75, "USD": 9.90}
 FX_TICKERS = {"EUR": "EURMAD=X", "USD": "MAD=X"}
 FX_LABELS = {"MAD": "Dirham marocain", "EUR": "Euro", "USD": "Dollar US"}

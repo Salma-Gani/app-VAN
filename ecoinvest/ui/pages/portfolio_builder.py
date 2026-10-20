@@ -1,13 +1,14 @@
 """Portefeuille : allocation actuelle vs cible, arbitrages et recommandations comparées."""
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Dict, List
 
 import pandas as pd
 import streamlit as st
 
 from ...config import BROKERAGE_FEE, COLORS
-from ...portfolio import optimize, profile as profile_mod, simulate
+from ...portfolio import ledger, optimize, profile as profile_mod, simulate
 from ...utils.formatting import fmt_money, fmt_num, fmt_pct
 from .. import charts, components as ui
 from . import shared
@@ -50,7 +51,156 @@ def render() -> None:
     _recommendation(profile, table)
     st.divider()
     _holdings_comparison(profile, enriched, table)
+    st.divider()
+    _ledger_section(table)
     ui.disclaimer()
+
+
+# ═══════════════════════════ Journal d'opérations ═══════════════════════════
+
+
+def _prices_from_table(table: pd.DataFrame) -> Dict[str, float]:
+    """Cours de clôture réels par symbole (aucun cours inventé)."""
+    prices: Dict[str, float] = {}
+    if table is None or table.empty or "symbol" not in table.columns:
+        return prices
+    for _, row in table.iterrows():
+        symbol = str(row.get("symbol") or "").upper()
+        try:
+            close = float(row.get("close"))
+        except (TypeError, ValueError):
+            continue
+        if symbol and pd.notna(close):
+            prices[symbol] = close
+    return prices
+
+
+def _ledger_section(table: pd.DataFrame) -> None:
+    ui.section(
+        "Journal d'opérations",
+        "Achats, ventes, dividendes, frais et mouvements de trésorerie : le coût de revient, "
+        "les plus-values réalisées et latentes et le solde de trésorerie sont recalculés "
+        "à partir des opérations saisies.",
+    )
+    ui.source_note(
+        ["Opérations saisies par vous", "Cours BVC pour la valorisation"],
+        detail="Méthode du coût moyen pondéré. Les frais d'achat sont inclus dans le coût de "
+               "revient. Un cours manquant rend la plus-value latente indisponible : aucun "
+               "cours n'est extrapolé.",
+    )
+
+    transactions = ledger.load_transactions()
+    prices = _prices_from_table(table)
+
+    with st.expander("➕ Ajouter une opération", expanded=not transactions):
+        with st.form("ledger_form", clear_on_submit=True):
+            row1 = st.columns(3)
+            kind = row1[0].selectbox(
+                "Type d'opération",
+                options=list(ledger.KINDS),
+                format_func=lambda key: ledger.KIND_LABELS[key],
+            )
+            tx_date = row1[1].date_input("Date", value=date.today())
+            currency = row1[2].text_input("Devise", value="MAD")
+            row2 = st.columns(3)
+            symbol = row2[0].text_input("Symbole (achat / vente / dividende)", value="")
+            quantity = row2[1].number_input("Quantité", min_value=0.0, step=1.0, value=0.0)
+            price = row2[2].number_input("Prix unitaire", min_value=0.0, step=0.01, value=0.0)
+            row3 = st.columns(2)
+            amount = row3[0].number_input(
+                "Montant (frais, apport, retrait, dividende)", min_value=0.0, step=1.0, value=0.0
+            )
+            fees = row3[1].number_input("Frais de l'opération", min_value=0.0, step=0.01, value=0.0)
+            note = st.text_input("Note (facultatif)")
+            submitted = st.form_submit_button("Enregistrer l'opération", type="primary")
+        if submitted:
+            payload = {
+                "kind": kind,
+                "date": tx_date.isoformat(),
+                "symbol": symbol.strip().upper(),
+                "quantity": quantity or None,
+                "price": price or None,
+                "amount": amount or None,
+                "fees": fees or 0.0,
+                "currency": currency.strip().upper() or "MAD",
+                "note": note,
+            }
+            try:
+                ledger.add_transaction(payload)
+            except ledger.LedgerError as exc:
+                st.error(f"Opération refusée : {exc}")
+            else:
+                st.success("Opération enregistrée.")
+                st.rerun()
+
+    if not transactions:
+        ui.note(
+            "Aucune opération enregistrée. Ajoutez un apport, puis vos achats et ventes : "
+            "les positions et la performance seront calculées à partir du journal.",
+            "warn", "📒",
+        )
+        return
+
+    report = ledger.summary(transactions, prices)
+    ui.kpi_row(
+        [
+            {"label": "Valeur des positions", "value": fmt_money(report["market_value"], "MAD"),
+             "sub": f"{report['positions']} ligne(s)", "tone": "blue"},
+            {"label": "Capital investi", "value": fmt_money(report["invested"], "MAD"),
+             "sub": "coût de revient", "tone": "flat"},
+            {"label": "Plus-value latente", "value": fmt_money(report["unrealized_pnl"], "MAD"),
+             "sub": "cours disponibles", "tone": "up" if report["unrealized_pnl"] >= 0 else "down"},
+            {"label": "Plus-value réalisée", "value": fmt_money(report["realized_pnl"], "MAD"),
+             "sub": "ventes", "tone": "up" if report["realized_pnl"] >= 0 else "down"},
+            {"label": "Trésorerie", "value": fmt_money(report["cash"], "MAD"),
+             "sub": "flux enregistrés", "tone": "accent"},
+        ],
+        per_row=5,
+    )
+
+    if report["missing_prices"]:
+        ui.note(
+            "Cours indisponible pour : " + ", ".join(report["missing_prices"]) +
+            ". La plus-value latente de ces lignes n'est pas calculée (aucun cours inventé) "
+            "et le total de valeur les exclut.",
+            "warn", "⚠️",
+        )
+
+    positions = ledger.compute_positions(transactions)
+    oversold = [issue for position in positions.values() for issue in position["issues"]]
+    for issue in oversold:
+        st.warning(issue)
+
+    frame = ledger.positions_frame(positions, prices)
+    if not frame.empty:
+        display = frame.copy()
+        for column in ("Coût de revient moyen", "Investi", "Cours", "Valeur",
+                       "Plus-value latente", "Dividendes", "Frais", "Plus-value réalisée"):
+            display[column] = display[column].apply(
+                lambda value: fmt_money(value, "MAD") if pd.notna(value) else "—"
+            )
+        display["Quantité"] = display["Quantité"].apply(
+            lambda value: fmt_num(value, 0) if pd.notna(value) else "—"
+        )
+        ui.table(display, height=320, key="ledger_positions")
+
+    with st.expander("Historique des opérations", expanded=False):
+        history = ledger.transactions_frame(transactions)
+        ui.table(history, height=340, key="ledger_history")
+        labels = {
+            tx["id"]: f"{tx['date']} · {ledger.KIND_LABELS[tx['kind']]} · {tx.get('symbol') or '—'}"
+            for tx in transactions
+        }
+        to_delete = st.selectbox(
+            "Supprimer une opération", options=[""] + list(labels), format_func=lambda key: labels.get(key, "—"),
+            key="ledger_delete_select",
+        )
+        if to_delete and st.button("Supprimer définitivement", key="ledger_delete_button"):
+            if ledger.delete_transaction(to_delete):
+                st.success("Opération supprimée.")
+                st.rerun()
+            else:
+                st.error("Opération introuvable : le journal n'a pas été modifié.")
 
 
 # ═══════════════════════════ Allocation actuelle ═══════════════════════════
