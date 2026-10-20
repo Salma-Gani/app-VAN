@@ -300,7 +300,7 @@ class MarketAgent:
 
         verdict = _verdict_from(score, tech.get("score"))
         lines = [f"## {symbol} — {row.get('name')}", f"*Secteur : {row.get('sector')}*", ""]
-        lines.append(f"**Verdict : {verdict}** — score composite {fmt_num(score, 0)}/100, "
+        lines.append(f"**Lecture : {verdict}** — score composite {fmt_num(score, 0)}/100, "
                      f"score technique {fmt_num(tech.get('score'), 2)} sur [-1 ; 1]")
         lines.append("")
         lines.append("### Chiffres clés")
@@ -375,26 +375,24 @@ class MarketAgent:
         risk_lvl = _risk_level(row.get("volatility"), row.get("beta"))
         lines.append(f"- Appréciation : **{risk_lvl}**")
 
-        close = row.get("close")
-        if close:
-            stop = float(close) * 0.93
-            target = float(levels.get("resistance") or close * 1.12)
-            rr = (target - close) / (close - stop) if close > stop else None
-            size = _position_size(self.ctx.profile)
+        support = levels.get("support")
+        resistance = levels.get("resistance")
+        if support is not None or resistance is not None:
             lines.append("")
-            lines.append("### Plan d'exécution suggéré")
+            lines.append("### Niveaux observés")
+            if support is not None:
+                lines.append(f"- Support technique calculé sur l'historique : **{fmt_num(support)} MAD**")
+            if resistance is not None:
+                lines.append(f"- Résistance technique calculée sur l'historique : **{fmt_num(resistance)} MAD**")
             lines.append(
-                f"- Zone d'entrée : **{fmt_num(float(close) * 0.98)} – {fmt_num(float(close) * 1.01)} MAD** (fractionner en 2–3 ordres)\n"
-                f"- Invalidation (stop) : **{fmt_num(stop)} MAD**\n"
-                f"- Objectif : **{fmt_num(target)} MAD**\n"
-                f"- Rapport gain/risque : **{fmt_num(rr, 2)}**\n"
-                f"- Taille de position indicative : **{size}** du portefeuille risqué"
+                "- Ces niveaux sont des repères statistiques, ni un objectif de cours, ni une "
+                "consigne d'entrée, de sortie ou de taille de position."
             )
         lines.append("")
         lines.append("> ⚠️ **Risques** : ceci est une analyse quantitative automatisée, pas un conseil "
-                     "d'investissement. Risque de perte en capital, risque de liquidité sur les petites "
-                     "capitalisations et risque de concentration. Vérifiez les publications officielles "
-                     "de la société avant toute décision.")
+                     "d'investissement ni une consigne d'action. Risque de perte en capital, risque de "
+                     "liquidité sur les petites capitalisations et risque de concentration. Vérifiez les "
+                     "publications officielles de la société avant toute décision.")
         return "\n".join(lines)
 
     def _local_direct_analysis(self, symbol: str, payload: Dict[str, Any]) -> str:
@@ -414,14 +412,14 @@ class MarketAgent:
                 score = found.iloc[0].get("composite_score")
         base_verdict = _verdict_from(score, tech.get("score"))
         rsi = (momentum.get("rsi") if momentum.get("rsi") is not None else row.get("rsi14"))
-        if base_verdict in ("Achat fort", "Achat"):
-            direct_verdict = "Achat progressif"
-        elif base_verdict == "Conserver":
-            direct_verdict = "Prudence / conserver"
-        elif base_verdict == "Attendre":
-            direct_verdict = "Attendre un signal de confirmation"
+        if base_verdict in ("Signaux très favorables", "Signaux favorables"):
+            direct_verdict = "Biais positif"
+        elif base_verdict == "Signaux mitigés":
+            direct_verdict = "Biais neutre"
+        elif base_verdict == "Signaux insuffisants":
+            direct_verdict = "Signal insuffisant"
         else:
-            direct_verdict = "Éviter / attendre"
+            direct_verdict = "Biais négatif"
         try:
             rsi_value = float(rsi) if rsi is not None else None
         except (TypeError, ValueError):
@@ -497,19 +495,19 @@ class MarketAgent:
         )
 
         lines.append("")
-        lines.append("### Conclusion & recommandation")
+        lines.append("### Lecture d'ensemble")
         lines.append(
             f"**{direct_verdict}** — niveau de confiance **{confidence}**. "
             f"Score composite {fmt_num(score, 0)}/100 · score technique {fmt_num(tech.get('score'), 2)} "
             "sur [-1 ; 1]."
         )
         lines.append(
-            "Cette conclusion est une lecture analytique des données disponibles, pas un conseil "
-            "personnalisé ni une garantie de performance."
+            "Cette lecture est une synthèse des données disponibles, pas un conseil personnalisé, "
+            "ni une consigne d'action, ni une garantie de performance."
         )
 
         lines.append("")
-        lines.append("### Ce qui soutient la conclusion")
+        lines.append("### Ce qui soutient cette lecture")
         lines.extend(f"- {item}" for item in positives[:5]) if positives else lines.append(
             "- Aucun facteur favorable net identifié."
         )
@@ -972,16 +970,16 @@ def _verdict_from(composite: Optional[float], tech_score: Optional[float]) -> st
     except (TypeError, ValueError):
         return "Indéterminé"
     if score >= 72:
-        return "Achat fort"
+        return "Signaux très favorables"
     if score >= 62:
-        return "Achat"
+        return "Signaux favorables"
     if score >= 52:
-        return "Conserver"
+        return "Signaux mitigés"
     if score >= 42:
-        return "Attendre"
+        return "Signaux insuffisants"
     if score >= 32:
-        return "Alléger"
-    return "Éviter"
+        return "Signaux défavorables"
+    return "Signaux très défavorables"
 
 
 def _risk_level(volatility: Optional[float], beta: Optional[float]) -> str:
@@ -995,21 +993,6 @@ def _risk_level(volatility: Optional[float], beta: Optional[float]) -> str:
     if v >= 0.10:
         return "Risque faible à modéré"
     return "Risque faible"
-
-
-def _position_size(profile: Any) -> str:
-    if profile is None:
-        return "3–5 %"
-    risk = profile.overall_risk_score()
-    if risk < 0.3:
-        return "2–3 %"
-    if risk < 0.5:
-        return "3–5 %"
-    if risk < 0.7:
-        return "5–8 %"
-    if risk < 0.85:
-        return "8–10 %"
-    return "10–12 %"
 
 
 def _match_definition(question: str) -> Optional[str]:

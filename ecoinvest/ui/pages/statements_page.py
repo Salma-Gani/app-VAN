@@ -29,6 +29,7 @@ import streamlit as st
 from ...config import COLORS
 from ...data import statements as stmt
 from ...data import statements_extract as ext
+from ...data.fundamentals import is_financial_sector
 from ...utils.formatting import fmt_money, fmt_pct
 from .. import components as ui
 from . import shared
@@ -188,8 +189,10 @@ def render() -> None:
     if not records:
         ui.note(
             f"**Aucun état financier enregistré pour {symbol}.** La page ne fabrique aucun chiffre. "
-            "Trois actions sont possibles : importer un CSV/Excel vérifié, interroger une API "
-            "configurée, ou rechercher le rapport officiel AMMC puis valider les montants.",
+            "La voie recommandée est de rechercher le rapport annuel officiel AMMC, puis de "
+            "valider les montants extraits. Vous pouvez aussi importer un CSV/Excel vérifié ou "
+            "compléter la saisie manuelle. Yahoo Finance n'est pas proposé : il ne fournit pas "
+            "d'états financiers marocains exploitables.",
             "warn", "🧾",
         )
         st.markdown(
@@ -217,15 +220,17 @@ def render() -> None:
         _block(record, "balance_liabilities", "Bilan — passif",
                "Capitaux propres, dettes de financement, passif circulant et total passif.")
     with tabs[2]:
+        revenue_label = ("Produit net bancaire" if is_financial_sector(str(row.get("sector") or ""))
+                         else "Chiffre d'affaires")
         _block(record, "income", "Compte de produits et charges (CPC)",
-               "Chiffre d'affaires, résultat d'exploitation, résultat financier, impôt et résultat net.")
+               f"{revenue_label}, résultat d'exploitation, résultat financier, impôt et résultat net.")
     with tabs[3]:
         _block(record, "cashflow", "Trésorerie & autofinancement",
                "Flux opérationnels, investissements, financement et distributions.")
     with tabs[4]:
         _ratios(record, row)
     with tabs[5]:
-        _history(symbol, records)
+        _history(symbol, records, row)
     with tabs[6]:
         _import_tabs(symbol, row)
     with tabs[7]:
@@ -257,6 +262,8 @@ def _source_note(record: Dict[str, Any]) -> None:
     parts = [record.get("source") or "source non renseignée"]
     if record.get("source_url"):
         parts.append(str(record["source_url"]))
+    display_unit = record.get("unit") or "MAD"
+    source_unit = record.get("source_unit") or display_unit
     st.markdown(
         ui.badge(f"Statut : {status or '—'}", tone) + " " +
         ui.badge(f"{record.get('currency', 'MAD')} · {record.get('unit', 'MAD')}", "info") + " " +
@@ -270,7 +277,8 @@ def _source_note(record: Dict[str, Any]) -> None:
             f"clôture {record.get('period_end') or '—'}"
         ),
         detail=(
-            f"{kind} · unité {record.get('unit', 'MAD')} · devise {record.get('currency', 'MAD')} · "
+            f"{kind} · unité affichée {display_unit} · document source {source_unit} · "
+            f"devise {record.get('currency', 'MAD')} · "
             f"émetteur {record.get('issuer') or record.get('symbol')}."
         ),
     )
@@ -283,6 +291,8 @@ def _kpis(record: Dict[str, Any], market_row: pd.Series) -> None:
     currency = str(record.get("currency") or "MAD")
     factor = stmt.unit_multiplier(record.get("unit"))
     unit_label = str(record.get("unit") or "MAD")
+    financial = is_financial_sector(str(market_row.get("sector") or ""))
+    revenue_label = "Produit net bancaire" if financial else "Chiffre d'affaires"
 
     def amount(value: Any) -> str:
         try:
@@ -292,14 +302,16 @@ def _kpis(record: Dict[str, Any], market_row: pd.Series) -> None:
 
     ui.kpi_row(
         [
-            {"label": "Chiffre d'affaires", "value": amount(income.get("revenue")),
+            {"label": revenue_label, "value": amount(income.get("revenue")),
              "sub": f"exercice {record.get('fiscal_year')} · {unit_label}", "tone": "blue"},
             {"label": "Résultat d'exploitation", "value": amount(income.get("operating_income")),
              "sub": "EBIT", "tone": "accent"},
             {"label": "Résultat net", "value": amount(income.get("net_income")),
-             "sub": "consolidé" if record.get("consolidated") else "sociaux", "tone": "up"},
+             "sub": ("consolidé · part du groupe" if financial else
+                     ("consolidé" if record.get("consolidated") else "sociaux")), "tone": "up"},
             {"label": "Capitaux propres", "value": amount(balance.get("equity")),
-             "sub": "actif net comptable", "tone": "info"},
+             "sub": ("part du groupe · actif net comptable" if record.get("consolidated")
+                     else "actif net comptable"), "tone": "info"},
             {"label": "Free Cash-Flow", "value": amount(cashflow.get("free_cash_flow")),
              "sub": "CAF − investissements", "tone": "accent"},
         ],
@@ -344,11 +356,13 @@ def _block(record: Dict[str, Any], block: str, title: str, subtitle: str) -> Non
             f"Détail des postes non disponible pour l'exercice {year} : les agrégats "
             "vérifiés sont affichés (aucune ligne n'est inventée)."
         )
-    unit = record.get("unit")
+    unit = record.get("unit") or "MAD"
+    source_unit = record.get("source_unit") or unit
+    converted = str(source_unit).strip().lower() != str(unit).strip().lower()
     st.caption(
         f"Montants exprimés en {record.get('currency') or 'MAD'} "
-        f"(unité source : {unit or 'MAD'})."
-        + (" Conversion en MAD appliquée pour l'affichage." if stmt.unit_multiplier(unit) != 1 else "")
+        f"(document source : {source_unit})."
+        + (" Valeurs converties en MAD pour l'affichage et les ratios." if converted else "")
     )
     ui.table(
         _exercise_columns(_fmt_block(table, unit), record),
@@ -393,15 +407,20 @@ def _ratios(record: Dict[str, Any], market_row: pd.Series) -> None:
         "Les ratios de marché (PER, P/B, EV/EBITDA) utilisent le cours et la capitalisation BVC."
     )
     st.caption(
-        "Conventions : ROE = résultat net / capitaux propres ; PER = capitalisation / résultat net "
-        "(≡ cours / BPA) ; P/B = capitalisation / capitaux propres ; "
+        "Conventions : ROE = résultat net / capitaux propres, les deux retenus dans le même "
+        "périmètre (part du groupe pour les comptes consolidés avec minoritaires) ; "
+        "PER = capitalisation / résultat net (≡ cours / BPA) ; "
+        "P/B = capitalisation / capitaux propres du même périmètre ; "
         "EV/EBITDA = (capitalisation + dette nette) / EBITDA ; "
         "payout = dividendes versés / résultat net. Un dénominateur négatif ou nul désactive le ratio."
     )
 
 
-def _history(symbol: str, records: List[Dict[str, Any]]) -> None:
+def _history(symbol: str, records: List[Dict[str, Any]], market_row: pd.Series) -> None:
     ui.section("Historique", "Évolution des principaux agrégats sur les exercices disponibles.")
+    revenue_label = ("Produit net bancaire"
+                     if is_financial_sector(str(market_row.get("sector") or ""))
+                     else "Chiffre d'affaires")
     rows = []
     for record in records:
         income = record.get("income") or {}
@@ -418,7 +437,7 @@ def _history(symbol: str, records: List[Dict[str, Any]]) -> None:
         rows.append({
             "Exercice": record.get("fiscal_year"),
             "Type": "Consolidé" if record.get("consolidated") else "Social",
-            "Chiffre d'affaires": convert(income.get("revenue")),
+            revenue_label: convert(income.get("revenue")),
             "EBITDA": convert(income.get("ebitda")),
             "Résultat net": convert(income.get("net_income")),
             "Capitaux propres": convert(balance.get("equity")),
@@ -436,7 +455,7 @@ def _history(symbol: str, records: List[Dict[str, Any]]) -> None:
     ui.table(display, height=280, key=f"stmt_history_{symbol}")
 
     fig = go.Figure()
-    for column, color in (("Chiffre d'affaires", COLORS["primary"]),
+    for column, color in ((revenue_label, COLORS["primary"]),
                           ("Résultat net", COLORS["accent"]),
                           ("Free Cash-Flow", COLORS["navy"])):
         if frame[column].notna().any():
@@ -589,14 +608,19 @@ def _render_extraction(symbol: str, row: pd.Series, payload: Dict[str, Any], key
 
 
 def _import_tabs(symbol: str, row: pd.Series) -> None:
-    tabs = st.tabs(["🔌 API externe", "📄 CSV / Excel", "🏛️ Documents AMMC", "✍️ Saisie manuelle"])
+    # L'AMMC est la source officielle marocaine : elle est proposée en premier.
+    # Yahoo Finance est volontairement absent (pas d'états marocains fiables).
+    tabs = st.tabs([
+        "🏛️ Documents AMMC (recommandé)", "📄 CSV / Excel",
+        "🔌 API externe (optionnel)", "✍️ Saisie manuelle",
+    ])
 
     with tabs[0]:
-        _api_import(symbol)
+        _ammc_import(symbol, row)
     with tabs[1]:
         _file_import()
     with tabs[2]:
-        _ammc_import(symbol, row)
+        _api_import(symbol)
     with tabs[3]:
         st.caption(
             "La saisie manuelle détaillée se fait dans « Données fondamentales ». Elle reste "
@@ -608,25 +632,31 @@ def _import_tabs(symbol: str, row: pd.Series) -> None:
 
 
 def _api_import(symbol: str) -> None:
-    ui.section("Importer depuis une API", "Les clés restent dans l'environnement (.env), jamais dans le code.")
+    ui.section(
+        "Importer depuis une API externe (optionnel)",
+        "Les clés restent dans l'environnement (.env), jamais dans le code. "
+        "Pour une valeur marocaine, la source de référence reste l'AMMC.",
+    )
+    api_items = [item for item in stmt.provider_status() if item["key"] in {"eodhd", "fmp"}]
     status = pd.DataFrame([
         {"Fournisseur": item["label"], "Clé requise": item["env"] or "—",
          "État": "configuré" if item["configured"] else "non configuré",
          "Note": item["note"]}
-        for item in stmt.provider_status()
+        for item in api_items
     ])
-    ui.table(status, height=230, key="stmt_providers")
+    ui.table(status, height=180, key="stmt_providers")
 
-    usable = [
-        item for item in stmt.provider_status()
-        if item["configured"] and item["key"] in {"eodhd", "fmp", "yahoo"}
-    ]
+    usable = [item for item in api_items if item["configured"]]
     if not usable:
         ui.note(
-            "Aucune API externe n'est configurée. Ajoutez `EODHD_API_KEY` ou `FMP_API_KEY` dans "
-            "`.env`, ou utilisez Yahoo Finance (sans clé) pour les valeurs internationales.",
-            "warn", "🔑",
+            "**Aucune API externe n'est configurée.** Ce n'est pas bloquant : utilisez "
+            "l'onglet « Documents AMMC », qui donne accès aux rapports officiels des "
+            "émetteurs marocains. Yahoo Finance n'est plus proposé ici : il ne fournit "
+            "pas d'états financiers marocains exploitables. Si vous disposez d'une API "
+            "EODHD ou FMP, ajoutez `EODHD_API_KEY` ou `FMP_API_KEY` dans `.env`.",
+            "warn", "🏛️",
         )
+        st.markdown(f"[Consulter la liste officielle des états financiers AMMC]({stmt.AMMC_LIST})")
         return
 
     options = {item["key"]: item["label"] for item in usable}
@@ -739,12 +769,37 @@ def _ammc_import(symbol: str, row: pd.Series) -> None:
         else:
             st.markdown(f"- [{label}]({doc.get('url')})")
 
-    if st.button("📄 Lire le premier PDF et structurer", key=f"stmt_ammc_read_{symbol}"):
-        docs_with_pdf = [d for d in docs if d.get("pdf_url")]
-        if not docs_with_pdf:
-            st.warning("Aucun PDF direct n'a été trouvé pour ces documents.")
-            return
-        doc = docs_with_pdf[0]
+    with_pdf = [d for d in docs if d.get("pdf_url")]
+    if not with_pdf:
+        st.warning("Aucun PDF direct n'a été trouvé pour ces documents.")
+        return
+
+    # Priorité au rapport annuel : les rapports semestriels ne contiennent pas
+    # le bilan annuel complet. On ne choisit jamais un PDF au hasard.
+    annual = [
+        d for d in with_pdf
+        if any(token in str(d.get("title") or "").lower()
+               for token in ("annuel", "rfa", "document d'enregistrement universel"))
+    ]
+    choices = annual or with_pdf
+    labels = [
+        f"{d.get('year') or '—'} — {d.get('title') or 'Document'}"
+        for d in choices
+    ]
+    choice = st.selectbox(
+        "Rapport à structurer", list(range(len(choices))),
+        format_func=lambda index: labels[index],
+        key=f"stmt_ammc_choice_{symbol}",
+    )
+    doc = choices[choice]
+    st.markdown(f"[Ouvrir le PDF officiel]({doc['pdf_url']})")
+    ui.note(
+        "**L'extraction produit un brouillon, jamais un enregistrement automatique.** "
+        "Vérifiez chaque montant, l'exercice, l'unité et la page du PDF avant de valider. "
+        "Les tableaux AMMC sont hétérogènes : une ligne mal lue doit être corrigée ou ignorée.",
+        "info", "🧾",
+    )
+    if st.button("📄 Télécharger et préparer le brouillon", key=f"stmt_ammc_read_{symbol}"):
         try:
             with st.spinner("Téléchargement et structuration du PDF…"):
                 content = stmt.fetch_bytes(doc["pdf_url"])

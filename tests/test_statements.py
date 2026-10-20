@@ -52,11 +52,39 @@ class TestStatementsSeed(unittest.TestCase):
     def test_coverage_reports_status(self) -> None:
         market = pd.DataFrame({"symbol": ["TMA", "MOX", "ZZZ"], "name": ["T", "M", "Z"]})
         coverage = stmt.coverage(market)
-        self.assertEqual(len(coverage), 3)
+        # Le seed contient désormais sept émetteurs vérifiés (TMA, MOX, IAM,
+        # ATW, CSR, BCP, BOA) ; le marché ajoute ZZZ, non couvert.
+        self.assertEqual(len(coverage), 8)
         row = coverage[coverage["Symbole"] == "TMA"].iloc[0]
         self.assertEqual(row["Dernier exercice"], 2024)
         missing = coverage[coverage["Symbole"] == "ZZZ"].iloc[0]
         self.assertEqual(missing["Statut"], "non couvert")
+
+    def test_ammc_seed_covers_major_issuers(self) -> None:
+        for symbol in ("IAM", "ATW", "CSR", "BCP", "BOA"):
+            records = stmt.get_statements(symbol)
+            self.assertGreaterEqual(len(records), 2, symbol)
+            latest = records[0]
+            self.assertEqual(latest["fiscal_year"], 2024)
+            self.assertTrue(latest["consolidated"])
+            self.assertIn("ammc.ma", latest["source_url"])
+            self.assertFalse(stmt.record_issues(latest), symbol)
+
+    def test_bcp_boa_use_group_equity_and_group_net_income(self) -> None:
+        bcp = stmt.fundamentals_for("BCP")
+        self.assertAlmostEqual(bcp["net_income"], 4_145_346_000.0, places=2)
+        self.assertAlmostEqual(bcp["equity"], 37_043_849_000.0, places=2)
+        self.assertAlmostEqual(bcp["total_assets"], 542_278_560_000.0, places=2)
+        boa = stmt.fundamentals_for("BOA")
+        self.assertAlmostEqual(boa["net_income"], 3_427_420_000.0, places=2)
+        self.assertAlmostEqual(boa["equity"], 29_129_447_000.0, places=2)
+        self.assertAlmostEqual(boa["total_assets"], 423_278_818_000.0, places=2)
+
+    def test_provider_status_does_not_expose_yahoo(self) -> None:
+        keys = {item["key"] for item in stmt.provider_status()}
+        self.assertNotIn("yahoo", keys)
+        self.assertIn("ammc", keys)
+        self.assertEqual(stmt.FETCHERS.get("yahoo"), None)
 
     def test_provider_status_never_leaks_keys(self) -> None:
         for item in stmt.provider_status():

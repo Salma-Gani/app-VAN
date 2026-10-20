@@ -9,15 +9,17 @@ Trois voies d'alimentation :
 
 1. **Jeu de données vérifié** (``data/seed/bvc_statements.json``) — chiffres
    repris des rapports financiers annuels publiés par l'AMMC, avec l'URL du
-   document. Sert aussi de référence de contrôle pour les autres voies.
-2. **API externes** — EODHD, Financial Modeling Prep et Yahoo Finance
-   (clés dans ``.env`` ; aucune clé n'est codée en dur). La couverture des
-   valeurs marocaines dépend du fournisseur : elle est signalée telle quelle.
-3. **Documents officiels AMMC** — la liste publique des états financiers est
-   lue, les PDF sont proposés au téléchargement et un extracteur de secours
-   (``pypdf``) peut pré-remplir les principaux postes, sous validation
-   humaine. Un PDF n'est pas une API : l'automatisation dépend des droits
-   d'utilisation accordés par l'émetteur.
+   document et, pour les lignes détaillées, la page du PDF. Sert aussi de
+   référence de contrôle pour les autres voies.
+2. **Documents officiels AMMC** — voie principale pour les valeurs marocaines.
+   La liste publique des états financiers est lue, les PDF sont proposés au
+   téléchargement et un extracteur (``pypdf``) pré-remplit un brouillon, sous
+   validation humaine. Un PDF n'est pas une API : l'automatisation dépend des
+   droits d'utilisation accordés par l'émetteur.
+3. **API externes optionnelles** — EODHD et Financial Modeling Prep (clés dans
+   ``.env`` ; aucune clé n'est codée en dur). La couverture des valeurs
+   marocaines dépend du fournisseur : elle est signalée telle quelle.
+   Yahoo Finance n'est plus exposé pour les états financiers marocains.
 
 Aucune donnée n'est fabriquée : un champ absent ressort à ``None`` et s'affiche
 « — » dans l'interface.
@@ -388,8 +390,12 @@ def to_fundamentals(record: Dict[str, Any],
 
     out: Dict[str, Any] = {
         "revenue": _num(income.get("revenue")),
+        "gross_profit": _num(income.get("gross_profit")),
         "ebitda": _num(income.get("ebitda")),
         "ebit": _num(income.get("operating_income")),
+        "depreciation": _num(income.get("depreciation")),
+        "interest_expense": _num(income.get("interest_expense")),
+        "taxes": _num(income.get("taxes")),
         "net_income": net_income,
         "eps": eps,
         "fcf": fcf,
@@ -538,9 +544,15 @@ def ratios_for(record: Dict[str, Any], market: Optional[Dict[str, Any]] = None) 
                      "Unité": unit, "Formule": formula, "Statut": "Calculé",
                      "Note": note})
 
-    add("Marge brute", _num(income.get("gross_profit")), _num(income.get("revenue")),
-        "marge brute / chiffre d'affaires", numerator_name="marge brute",
-        denominator_name="chiffre d'affaires")
+    excluded = any(word in sector for word in EV_METHOD_EXCLUDED_SECTORS)
+    if excluded:
+        add("Marge brute", None, None, "marge brute / chiffre d'affaires",
+            status="Non pertinent",
+            note="secteur bancaire ou assurance : la notion de marge brute industrielle ne s'applique pas")
+    else:
+        add("Marge brute", _num(income.get("gross_profit")), _num(income.get("revenue")),
+            "marge brute / chiffre d'affaires", numerator_name="marge brute",
+            denominator_name="chiffre d'affaires")
     add("Marge d'exploitation", _num(income.get("operating_income")), _num(income.get("revenue")),
         "résultat d'exploitation / chiffre d'affaires", numerator_name="résultat d'exploitation",
         denominator_name="chiffre d'affaires")
@@ -557,20 +569,35 @@ def ratios_for(record: Dict[str, Any], market: Optional[Dict[str, Any]] = None) 
     add("ROA", net_income, _num(balance.get("total_assets")),
         "résultat net / total actif", numerator_name="résultat net",
         denominator_name="total actif")
-    add("Levier financier", _num(balance.get("total_debt")), equity,
-        "dettes de financement / capitaux propres", unit="x", scale=1.0,
-        numerator_name="dettes de financement", denominator_name="capitaux propres")
-    add("Liquidité générale", _num(balance.get("current_assets")),
-        _num(balance.get("current_liabilities")),
-        "actif circulant / passif circulant", unit="x", scale=1.0,
-        numerator_name="actif circulant", denominator_name="passif circulant")
-    add("Couverture des intérêts", _num(income.get("operating_income")),
-        _num(income.get("interest_expense")),
-        "résultat d'exploitation / charges d'intérêts", unit="x", scale=1.0,
-        numerator_name="résultat d'exploitation", denominator_name="charges d'intérêts")
-    add("FCF / chiffre d'affaires", _num(cashflow.get("free_cash_flow")),
-        _num(income.get("revenue")), "free cash-flow / chiffre d'affaires",
-        numerator_name="free cash-flow", denominator_name="chiffre d'affaires")
+    if excluded:
+        add("Levier financier", None, None, "dettes de financement / capitaux propres",
+            unit="x", status="Non pertinent",
+            note="secteur bancaire ou assurance : le levier est structurel, les ratios prudentiels sont plus pertinents")
+        add("Liquidité générale", None, None, "actif circulant / passif circulant",
+            unit="x", status="Non pertinent",
+            note="secteur bancaire ou assurance : la liquidité générale n'est pas comparable")
+        add("Couverture des intérêts", None, None,
+            "résultat d'exploitation / charges d'intérêts", unit="x",
+            status="Non pertinent",
+            note="secteur bancaire ou assurance : les intérêts font partie de l'activité courante")
+        add("FCF / chiffre d'affaires", None, None,
+            "free cash-flow / chiffre d'affaires", status="Non pertinent",
+            note="secteur bancaire ou assurance : le free cash-flow industriel n'est pas transposable")
+    else:
+        add("Levier financier", _num(balance.get("total_debt")), equity,
+            "dettes de financement / capitaux propres", unit="x", scale=1.0,
+            numerator_name="dettes de financement", denominator_name="capitaux propres")
+        add("Liquidité générale", _num(balance.get("current_assets")),
+            _num(balance.get("current_liabilities")),
+            "actif circulant / passif circulant", unit="x", scale=1.0,
+            numerator_name="actif circulant", denominator_name="passif circulant")
+        add("Couverture des intérêts", _num(income.get("operating_income")),
+            _num(income.get("interest_expense")),
+            "résultat d'exploitation / charges d'intérêts", unit="x", scale=1.0,
+            numerator_name="résultat d'exploitation", denominator_name="charges d'intérêts")
+        add("FCF / chiffre d'affaires", _num(cashflow.get("free_cash_flow")),
+            _num(income.get("revenue")), "free cash-flow / chiffre d'affaires",
+            numerator_name="free cash-flow", denominator_name="chiffre d'affaires")
     add("Distribution (payout)", _num(cashflow.get("dividends_paid")), net_income,
         "dividendes versés / résultat net", numerator_name="dividendes versés",
         denominator_name="résultat net")
@@ -903,29 +930,24 @@ def import_table(content: bytes, filename: str = "") -> Dict[str, Any]:
 # ═══════════════════════════ Fournisseurs externes ═══════════════════════════
 
 PROVIDERS: Dict[str, Dict[str, Any]] = {
+    "ammc": {
+        "label": "AMMC — documents officiels (source principale)",
+        "env": "",
+        "note": "Liste publique des états financiers et PDF des émetteurs marocains. "
+                "Source officielle pour le Maroc ; ce n'est pas une API, les droits "
+                "de réutilisation doivent être vérifiés.",
+    },
     "eodhd": {
-        "label": "EODHD",
+        "label": "EODHD (API, optionnel)",
         "env": "EODHD_API_KEY",
         "note": "États financiers annuels et trimestriels, couverture mondiale. "
                 "Suffixe de place configurable via EODHD_EXCHANGE (ex. MA).",
     },
     "fmp": {
-        "label": "Financial Modeling Prep",
+        "label": "Financial Modeling Prep (API, optionnel)",
         "env": "FMP_API_KEY",
         "note": "Compte de résultat, bilan et trésorerie normalisés. "
                 "Couverture des places africaines à vérifier selon le titre.",
-    },
-    "yahoo": {
-        "label": "Yahoo Finance (yfinance)",
-        "env": "",
-        "note": "Sans clé. Pertinent surtout pour les valeurs internationales ; "
-                "la couverture des valeurs marocaines est limitée.",
-    },
-    "ammc": {
-        "label": "AMMC — documents officiels",
-        "env": "",
-        "note": "Liste publique des états financiers + PDF des émetteurs. "
-                "Ce n'est pas une API : vérifiez les droits de réutilisation.",
     },
     "manual": {
         "label": "Saisie / import CSV",
@@ -1206,7 +1228,11 @@ def fetch_yahoo(symbol: str, limit: int = 5) -> List[Dict[str, Any]]:
     return records
 
 
-FETCHERS = {"eodhd": fetch_eodhd, "fmp": fetch_fmp, "yahoo": fetch_yahoo}
+# Yahoo Finance n'est volontairement plus exposé pour les états financiers :
+# il ne fournit pas de comptes marocains fiables et ne doit pas être proposé
+# comme substitut à l'AMMC. La fonction ``fetch_yahoo`` reste disponible pour
+# un usage international explicite, mais n'est pas branchée sur cette page.
+FETCHERS = {"eodhd": fetch_eodhd, "fmp": fetch_fmp}
 
 
 def fetch_provider(provider: str, symbol: str, **kwargs: Any) -> List[Dict[str, Any]]:

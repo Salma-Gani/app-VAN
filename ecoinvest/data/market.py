@@ -181,24 +181,24 @@ def vix_regime(force: bool = False) -> Dict[str, Any]:
 
     if level < 12:
         label, score, color = "Complaisance extrême", -0.35, "#B45309"
-        advice = ("Volatilité très basse : le marché est serein mais vulnérable à un choc. "
-                  "Évitez les achats en euphorie ; privilégiez les renforcements progressifs.")
+        advice = ("Volatilité implicite très basse. Un régime calme peut précéder un choc : "
+                  "l'absence de stress visible n'est pas une garantie.")
     elif level < 16:
         label, score, color = "Calme / risk-on", 0.65, "#0F766E"
-        advice = ("Régime favorable aux actifs risqués. Momentum haussier généralement "
-                  "fiable : les entrées sur cassure de résistance sont statistiquement payantes.")
+        advice = ("Volatilité implicite faible. Ce régime a souvent accompagné des marchés "
+                  "haussiers, sans que cela constitue une garantie.")
     elif level < 22:
         label, score, color = "Normalisation", 0.15, "#123B6D"
-        advice = ("Volatilité normale : sélectivité accrue. Privilégiez les valeurs à "
-                  "fondamentaux solides et évitez le levier.")
+        advice = ("Volatilité implicite normale. La dispersion des performances tend à "
+                  "augmenter ; la sélectivité devient plus informative.")
     elif level < 30:
         label, score, color = "Nervosité", -0.45, "#B45309"
-        advice = ("Marché nerveux : réduisez la taille des positions, échelonnez les entrées "
-                  "et surveillez les supports clés.")
+        advice = ("Volatilité implicite élevée. Les variations sont plus amples ; les supports "
+                  "techniques sont des repères, pas des garanties.")
     else:
         label, score, color = "Panique / risk-off", -0.85, "#B42318"
-        advice = ("Volatilité de crise : les marchés soldent en désordre. Opportunités "
-                  "potentielles pour un investisseur patient, mais entrée fractionnée obligatoire.")
+        advice = ("Volatilité implicite de crise. Les marchés peuvent solder en désordre ; "
+                  "toute opportunité éventuelle exige une gestion du risque explicite.")
     return {
         "level": level, "label": label, "score": score, "advice": advice,
         "color": color, "percentile": pct,

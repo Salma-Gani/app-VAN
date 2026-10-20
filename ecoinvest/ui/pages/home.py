@@ -174,7 +174,7 @@ def _pulse_html(indices: pd.DataFrame, regime: Dict[str, Any]) -> str:
     vix_level = vix.get("level")
     vix_change = vix.get("change")
     rows.append(
-        f'<div class="mm-index-row"><span class="mm-index-name">VIX</span>'
+        f'<div class="mm-index-row"><span class="mm-index-name">VIX S&amp;P 500</span>'
         f'<span><span class="mm-index-val">{_num(vix_level)}</span> '
         f'<span class="mm-delta {_tone(vix_change)}">{_pct(vix_change)}</span></span></div>'
     )
@@ -299,7 +299,7 @@ def _regime_card(regime: Dict[str, Any]) -> None:
           <div class="ei-kpi-label">Lecture du marché</div>
           <div style="margin:.5rem 0">{ui.badge(regime.get("label", "Indisponible"), tone)}</div>
           <div style="display:flex;gap:18px;margin-top:10px">
-            <div><div class="ei-kpi-label">VIX</div>
+            <div><div class="ei-kpi-label">VIX S&amp;P 500</div>
                  <div class="ei-kpi-value" style="font-size:1.3rem">{_num(vix.get("level"))}</div></div>
             <div><div class="ei-kpi-label">Hausses</div>
                  <div class="ei-kpi-value" style="font-size:1.3rem">{int(breadth.get("advancers") or 0)}</div></div>

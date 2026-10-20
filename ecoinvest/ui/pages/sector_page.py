@@ -119,6 +119,28 @@ def render() -> None:
     coverage = sector_compare.coverage_summary(frame)
     _kpis(chosen, frame, medians, coverage)
 
+    if coverage["with_ratios"]:
+        covered = frame.loc[
+            frame[[c for c in ("r_per", "r_pb", "r_roe", "r_net_margin", "r_ev_ebitda")
+                   if c in frame.columns]].notna().any(axis=1),
+            "symbol",
+        ].astype(str).tolist()
+        ui.note(
+            f"**Ratios fondamentaux disponibles pour {len(covered)} société(s) :** "
+            + ", ".join(f"`{s}`" for s in covered)
+            + ". Les autres valeurs du secteur n'ont pas d'états financiers vérifiés : "
+            "leurs colonnes restent « — », jamais zéro.",
+            "info", "🧮",
+        )
+    else:
+        ui.note(
+            f"**Aucun ratio fondamental pour « {chosen} ».** Les métriques de marché "
+            "(capitalisation, performance, volatilité, rendement du dividende) restent "
+            "disponibles ci-dessous. Pour activer P/E, P/B, ROE et marge nette, importez "
+            "les états AMMC des sociétés du secteur dans « États financiers ».",
+            "warn", "📄",
+        )
+
     for note in sector_compare.comparability_notes(metadata, chosen):
         ui.note(note, "warn", "⚠️")
 
@@ -139,6 +161,34 @@ def render() -> None:
 
 
 def _default_sector_index(table: pd.DataFrame, sectors: List[str]) -> int:
+    """Ouvre sur un secteur qui montre réellement des ratios.
+
+    L'ancien choix (secteur le plus peuplé) ouvrait sur « Bâtiment et
+    Matériaux », où aucun état financier n'est disponible : la page semblait
+    vide. On privilégie désormais les secteurs couverts, puis le nombre de
+    ratios calculés, puis la couverture relative.
+    """
+    fund_cols = [c for c in ("r_per", "r_pb", "r_roe", "r_net_margin",
+                             "r_revenue_growth") if c in table.columns]
+    if fund_cols:
+        work = table.copy()
+        for column in fund_cols:
+            work[column] = pd.to_numeric(work[column], errors="coerce")
+        work["_ratio_count"] = work[fund_cols].notna().sum(axis=1)
+        grouped = work.groupby("sector").agg(
+            valeurs=("symbol", "count"),
+            couvertes=("_ratio_count", lambda values: int((values > 0).sum())),
+            points=("_ratio_count", "sum"),
+        )
+        grouped = grouped[grouped["couvertes"] > 0].copy()
+        if not grouped.empty:
+            grouped["couverture"] = grouped["couvertes"] / grouped["valeurs"]
+            grouped = grouped.sort_values(
+                ["points", "couverture", "valeurs"], ascending=False
+            )
+            leader = str(grouped.index[0])
+            if leader in sectors:
+                return sectors.index(leader)
     counts = table["sector"].astype(str).value_counts()
     if counts.empty:
         return 0
@@ -186,14 +236,27 @@ def _comparison_tab(frame: pd.DataFrame, medians: Dict[str, Dict[str, Any]],
         "Ratios calculés uniquement à partir d'états financiers renseignés et compatibles.",
     )
     fundamental_keys = [k for k in FUNDAMENTAL_KEYS if medians.get(k, {}).get("applicable", True)]
-    available = sum(1 for key in fundamental_keys if medians[key]["count"] > 0)
-    if fundamental_keys and available:
+    available_keys = [k for k in fundamental_keys if medians[k]["count"] > 0]
+    missing_keys = [k for k in fundamental_keys if medians[k]["count"] == 0]
+    if fundamental_keys and available_keys:
         ui.table(
-            _display_frame(frame, medians, fundamental_keys),
+            _display_frame(frame, medians, available_keys),
             height=min(420, 44 * (len(frame) + 2)),
             key=f"sector_fundamentals_{sector}",
         )
-        _coverage_caption(medians, fundamental_keys)
+        _coverage_caption(medians, available_keys)
+        if "r_dividend_yield" in available_keys:
+            st.caption(
+                "Rendement du dividende : dernier dividende connu du référentiel BVC ; son "
+                "exercice de référence peut être postérieur à l'exercice comptable affiché."
+            )
+        if missing_keys:
+            st.caption(
+                "Non disponible pour ce secteur : "
+                + ", ".join(sector_compare.METRIC_BY_KEY[k]["label"] for k in missing_keys)
+                + ". Une donnée absente n'est jamais remplacée par zéro."
+            )
+        _ratio_coverage_table(frame, fundamental_keys, sector)
     elif fundamental_keys:
         ui.empty_state(
             "Aucun ratio fondamental calculable pour ce secteur : aucun état financier vérifié "
@@ -240,6 +303,31 @@ def _coverage_caption(medians: Dict[str, Dict[str, Any]], keys: List[str]) -> No
                          f"{info.get('count', 0)}/{info.get('total', 0)}")
     if parts:
         st.caption("Valeurs réellement utilisées pour la médiane — " + " · ".join(parts) + ".")
+
+
+def _ratio_coverage_table(frame: pd.DataFrame, keys: List[str], sector: str) -> None:
+    """Montre, société par société, quels ratios sont réellement calculables."""
+    ui.section(
+        "Couverture des ratios",
+        "✓ = ratio calculé à partir d'un état vérifié ; — = donnée absente ou non applicable. "
+        "Cette table rend le manque explicite et indique où l'importer.",
+    )
+    rows: List[Dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        item: Dict[str, Any] = {"Symbole": row["symbol"], "Société": row["name"]}
+        for key in keys:
+            item[sector_compare.METRIC_BY_KEY[key]["label"]] = (
+                "✓" if pd.notna(row.get(key)) else "—"
+            )
+        item["Exercice"] = row.get("fiscal_year") or "—"
+        item["Source"] = str(row.get("statement_source") or "—")[:64]
+        rows.append(item)
+    if rows:
+        ui.table(
+            pd.DataFrame(rows),
+            height=min(460, 40 * (len(rows) + 1)),
+            key=f"sector_ratio_coverage_{sector}",
+        )
 
 
 def _company_detail(frame: pd.DataFrame, medians: Dict[str, Dict[str, Any]],
@@ -292,6 +380,21 @@ def _company_detail(frame: pd.DataFrame, medians: Dict[str, Dict[str, Any]],
             f"Exercice **{meta.get('fiscal_year')}** · {perimeter} · "
             f"source : {meta.get('source') or 'non renseignée'}."
         )
+        source_unit = meta.get("source_unit")
+        display_unit = meta.get("unit") or "MAD"
+        if source_unit and str(source_unit).strip().lower() != str(display_unit).strip().lower():
+            st.caption(
+                f"Document source exprimé en {source_unit} ; valeurs converties en "
+                f"{display_unit} pour les ratios."
+            )
+        manual_fields = str(row.get("manual_fields") or "").strip()
+        if manual_fields:
+            ui.note(
+                f"**Champs saisis par l'utilisateur, non rattachés à un document vérifié :** "
+                f"{manual_fields}. Ils complètent les états AMMC mais ne bénéficient pas de la "
+                "même traçabilité. Vérifiez-les ou remplacez-les par une valeur extraite du PDF.",
+                "warn", "✍️",
+            )
     elif bool(row.get("has_fundamentals", False)):
         ui.note(
             "Des données fondamentales sont disponibles pour cette société, mais aucun état "
@@ -382,6 +485,18 @@ def _overview_tab(table: pd.DataFrame, chosen: str, overview: pd.DataFrame) -> N
         return
 
     display = overview.copy()
+    display["Couverture des ratios"] = display.apply(
+        lambda row: (
+            fmt_pct(row["Valeurs avec ratios"] / row["Valeurs"], 0)
+            if pd.notna(row.get("Valeurs")) and row.get("Valeurs") else "—"
+        ),
+        axis=1,
+    )
+    display = display[
+        ["Secteur", "Valeurs", "Valeurs avec ratios", "Couverture des ratios",
+         "Capitalisation médiane", "Perf. 12 mois médiane", "Volatilité médiane",
+         "Rendement du dividende médian", "P/E médian", "ROE médian"]
+    ]
     display["Capitalisation médiane"] = display["Capitalisation médiane"].apply(
         lambda value: fmt_money(value, "MAD", compact=True) if pd.notna(value) else "—"
     )
@@ -453,8 +568,12 @@ def _method_tab(sector: str) -> None:
         "**Aucun zéro de remplissage** : une donnée absente reste « — ». Un PER ou un EV/EBITDA "
         "négatif n'est pas affiché (il n'a pas de sens économique).\n\n"
         "**Comparabilité** : les exercices et les périmètres (social / consolidé) peuvent différer "
-        "d'une société à l'autre ; un avertissement le signale. Les banques et assurances sont "
-        "comparées entre elles, sans EV/EBITDA ni levier dette/fonds propres.\n\n"
+        "d'une société à l'autre ; un avertissement le signale. Pour les comptes consolidés avec "
+        "intérêts minoritaires, le ROE et le P/B utilisent la part du groupe, jamais le total. "
+        "Les banques et assurances sont comparées entre elles, sans EV/EBITDA ni levier "
+        "dette/fonds propres.\n\n"
+        "**Rendement du dividende** : dernier dividende connu du référentiel BVC ; son exercice "
+        "peut être postérieur à l'exercice comptable affiché.\n\n"
         "**Performance et volatilité** sont calculées sur l'historique réel du titre ; elles ne "
         "constituent pas une prévision.",
         "info", "🧮",

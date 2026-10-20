@@ -29,7 +29,7 @@ def render() -> None:
     ui.hero(
         "Market Mind AI",
         "Un analyste qui ne travaille qu'avec les données réelles chargées par l'application : "
-        "aucun chiffre inventé, aucune recommandation déconnectée du marché.",
+        "aucun chiffre inventé, aucune consigne d'achat ou de vente.",
         badge=ui.badge(f"{mode_label} · {status['active']}", "up" if status["mode"] == "llm" else "info"),
     )
 

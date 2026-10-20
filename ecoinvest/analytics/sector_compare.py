@@ -97,7 +97,7 @@ def _statement_metadata(record: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         return {
             "has_statement": False, "fiscal_year": None, "period": None,
             "consolidated": None, "source": None, "source_url": None,
-            "currency": None, "unit": None,
+            "currency": None, "unit": None, "source_unit": None,
         }
     return {
         "has_statement": True,
@@ -109,6 +109,7 @@ def _statement_metadata(record: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "source_url": record.get("source_url"),
         "currency": record.get("currency"),
         "unit": record.get("unit"),
+        "source_unit": record.get("source_unit") or record.get("unit"),
     }
 
 
@@ -154,6 +155,13 @@ def comparison_frame(
         item["has_fundamentals"] = bool(raw_fund) if pd.notna(raw_fund) else False
         item["fiscal_year"] = meta["fiscal_year"]
         item["statement_source"] = meta["source"]
+        # Champs saisis à la main : les rendre visibles dans le détail société
+        # pour ne pas les confondre avec un chiffre extrait d'un document.
+        item["fundamentals_source"] = (
+            None if pd.isna(row.get("fundamentals_source")) else row.get("fundamentals_source")
+        )
+        manual_fields = row.get("manual_fields")
+        item["manual_fields"] = "" if pd.isna(manual_fields) else str(manual_fields)
         rows.append(item)
 
     frame = pd.DataFrame(rows)

@@ -134,7 +134,7 @@ def _threshold_controls() -> Dict[str, float]:
         with c3:
             daily_move = st.number_input("Variation journalière (%)", min_value=1.0, max_value=30.0,
                                          value=5.0, step=0.5, key="alert_move")
-            vix_high = st.number_input("Seuil VIX", min_value=15.0, max_value=80.0, value=25.0,
+            vix_high = st.number_input("Seuil VIX S&P 500", min_value=15.0, max_value=80.0, value=25.0,
                                        step=1.0, key="alert_vix")
         st.caption(
             "Les seuils s'appliquent au prochain scan. Un drawdown de -20 % signifie une baisse "
@@ -156,7 +156,7 @@ def _scope_controls(watch: List[str]) -> tuple:
     with c1:
         scope = st.radio("Périmètre du scan", options, horizontal=True, key="alerts_scope")
     with c2:
-        include_vix = st.checkbox("Inclure l'alerte VIX", value=True, key="alerts_vix",
+        include_vix = st.checkbox("Inclure l'alerte VIX S&P 500", value=True, key="alerts_vix",
                                   help="Le VIX concerne les options sur le S&P 500, pas directement le MASI.")
     return scope, include_vix
 

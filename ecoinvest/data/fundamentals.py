@@ -281,7 +281,13 @@ def get_fundamentals(symbol: str, market_row: Optional[pd.Series] = None) -> Dic
     out["price"] = price
     bvc_data = bool(as_float(ref.get("shares")) is not None or as_float(ref.get("dps")) is not None)
     out["_bvc"] = bvc_data
-    manual = bool(load_store().get(symbol))
+    manual_record = load_store().get(symbol) or {}
+    manual = bool(manual_record)
+    # Rendre explicites les champs saisis à la main : ils ne doivent jamais
+    # être présentés comme issus d'un état financier vérifié.
+    out["manual_fields"] = sorted(
+        key for key in manual_record.keys() if key not in {"as_of", "updated_at"}
+    )
     has_statement = bool(rec.get("statement_source"))
     if has_statement and manual:
         out["_source"] = "états financiers + saisie utilisateur"
@@ -312,7 +318,14 @@ def compute_ratios(f: Dict[str, Any], price: Optional[float] = None, cap: Option
     """
     price = as_float(price) or as_float(f.get("price"))
     cap = as_float(cap) or as_float(f.get("market_cap"))
-    rec = {k: as_float(v) for k, v in f.items() if k in NUMERIC_FIELDS or k in {"market_cap", "bvps", "eps", "fcf_per_share"}}
+    # Champs de calcul : certains postes utiles aux ratios (charges d'intérêts,
+    # marge brute, impôts) ne font pas partie du formulaire de saisie, mais
+    # doivent rester disponibles lorsqu'ils proviennent d'un état financier.
+    calc_fields = set(NUMERIC_FIELDS) | {
+        "market_cap", "bvps", "eps", "fcf_per_share",
+        "interest_expense", "gross_profit", "depreciation", "taxes",
+    }
+    rec = {k: as_float(v) for k, v in f.items() if k in calc_fields}
     shares = rec.get("shares")
     net_income = rec.get("net_income")
     revenue = rec.get("revenue")

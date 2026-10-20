@@ -137,6 +137,8 @@ def build_market_table(
                 "momentum_score": momentum.get("score"),
                 "tech_score": tech_score,
                 **{f"r_{k}": v for k, v in ratios.items()},
+                "fundamentals_source": f.get("_source"),
+                "manual_fields": ", ".join(f.get("manual_fields") or []),
                 "has_fundamentals": bool(f.get("_bvc") or store.get(symbol)),
                 "sector_risk": SECTOR_RISK.get(str(row.get("sector")), 3),
             }
@@ -406,20 +408,23 @@ def market_regime(force: bool = False) -> Dict[str, Any]:
 
     if gate >= 0.35:
         label, color = "Risk-on — conditions favorables", "#0F766E"
-        advice = ("Le régime de marché soutient la prise de risque : les entrées sur valeurs "
-                  "de qualité en tendance haussière sont statistiquement favorisées.")
+        advice = ("Le régime observé est favorable à la prise de risque. Ce constat est "
+                  "statistique et ne préjuge pas des performances futures.")
     elif gate >= 0.1:
         label, color = "Légèrement favorable", "#123B6D"
-        advice = "Contexte porteur mais sans excès : privilégiez les renforcements progressifs."
+        advice = "Contexte légèrement porteur, sans excès manifeste dans les indicateurs."
     elif gate >= -0.1:
-        label, color = "Neutre — sélectivité requise", "#64748B"
-        advice = "Marché sans direction claire : concentrez-vous sur les meilleurs fondamentaux et fractionnez les entrées."
+        label, color = "Neutre — absence de direction", "#64748B"
+        advice = ("Marché sans direction claire. La sélectivité et la diversification sont "
+                  "les seuls repères robustes.")
     elif gate >= -0.35:
         label, color = "Prudence — risk-off modéré", "#B45309"
-        advice = "Conditions dégradées : réduisez la taille des positions et privilégiez les valeurs défensives."
+        advice = ("Conditions dégradées : le régime est défensif. La taille des positions et "
+                  "la tolérance au risque relèvent de votre décision.")
     else:
-        label, color = "Risk-off — éviter les entrées", "#B42318"
-        advice = "Régime hostile : privilégiez le cash et les valeurs à faible bêta ; n'entrez pas en force."
+        label, color = "Risk-off — conditions hostiles", "#B42318"
+        advice = ("Régime hostile : les indicateurs de marché sont négatifs. Aucune consigne "
+                  "d'entrée ou de sortie n'est donnée.")
 
     out = {
         "entry_gate": gate,

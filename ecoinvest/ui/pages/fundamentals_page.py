@@ -292,8 +292,9 @@ def _help() -> None:
 **1. Données de marché — réelles et automatiques**
 
 Cours, volumes, capitalisation, plus hauts/bas 52 semaines et historiques proviennent de
-l'API publique de la Bourse de Casablanca (`casablanca-bourse.com/api/boursenova`). Le VIX,
-les indices internationaux, l'or, le pétrole et les devises proviennent de Yahoo Finance.
+l'API publique de la Bourse de Casablanca (`casablanca-bourse.com/api/boursenova`). Le VIX
+(volatilité implicite des options S&P 500, et non du MASI), les indices internationaux, l'or,
+le pétrole et les devises proviennent de Yahoo Finance.
 Les actualités proviennent de flux RSS publics.
 
 **2. Données fondamentales — BVC + saisie**
