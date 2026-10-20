@@ -78,15 +78,16 @@ def render() -> None:
     ui.hero(
         "Comparaison sectorielle",
         "Comparez les sociétés d'un même secteur sur des métriques de marché et des ratios "
-        "fondamentaux vérifiés. Les banques et assurances ne sont pas mélangées aux industrielles.",
+        "fondamentaux tracés. Les banques et assurances ne sont pas mélangées aux industrielles.",
         badge=ui.badge(f"{len(sectors)} secteurs · {len(table)} valeurs", "info"),
     )
     ui.source_note(
         ["Bourse de Casablanca (cours, capitalisation, volumes)",
-         "États financiers vérifiés (AMMC / import validé)"],
+         "États financiers vérifiés (AMMC / import validé) et référentiel BVC"],
         detail="Les métriques de marché sont calculées pour toutes les valeurs. Les ratios "
-               "fondamentaux ne sont affichés que si les états financiers correspondants sont "
-               "renseignés. Une donnée absente reste « — », jamais zéro.",
+               "fondamentaux proviennent des états vérifiés lorsqu'ils existent, sinon du "
+               "référentiel BVC ou d'une saisie utilisateur. Chaque fiche indique l'exercice "
+               "et la source lorsqu'ils sont connus. Une donnée absente reste « — », jamais zéro.",
     )
 
     default_index = _default_sector_index(table, sectors)
@@ -293,10 +294,10 @@ def _company_detail(frame: pd.DataFrame, medians: Dict[str, Dict[str, Any]],
         )
     elif bool(row.get("has_fundamentals", False)):
         ui.note(
-            "Des données fondamentales proviennent du référentiel BVC, mais aucun état "
-            "financier vérifié n'est enregistré pour cette société : certains ratios peuvent "
-            "manquer et ne sont pas rattachés à un document source. Importez ses états dans "
-            "« États financiers » pour les consolider.",
+            "Des données fondamentales sont disponibles pour cette société, mais aucun état "
+            "financier vérifié n'est enregistré : elles proviennent du référentiel BVC ou d'une "
+            "saisie utilisateur, et ne sont pas rattachées à un document source. Importez ses "
+            "états dans « États financiers » pour les consolider.",
             "warn", "📄",
         )
     else:
