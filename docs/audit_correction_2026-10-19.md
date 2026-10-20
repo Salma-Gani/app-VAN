@@ -141,3 +141,76 @@ Correction :
 Vérifié dans le navigateur : barre 288 px, 10 liens de navigation visibles, contenu principal
 décalé de 288 px (aucun chevauchement), y compris lorsque l'attribut `aria-expanded` vaut
 `false`. Nouveau test : `tests/test_theme_sidebar.py`.
+
+## 9. Extraction et normalisation des états financiers (PDF/web → tableau)
+
+### Cause précise du problème
+
+Les états financiers étaient bien **récupérés** mais restaient du **texte brut** que
+l'application ne savait pas transformer en tableau :
+
+1. `_split_columns` ne coupait la ligne que sur **2 espaces ou plus**. Or `pypdf`
+   (mode d'extraction par défaut) renvoie souvent des colonnes séparées par une **seule**
+   espace : la ligne ne donnait qu'une colonne, `len(columns) < 2`, et était ignorée.
+2. Le motif de montant autorisait les espaces comme séparateurs de milliers et les
+   supprimait ensuite : `35 731 36 786 36 699` devenait **357313678636699**, fusionnant
+   les colonnes d'exercice en un seul nombre absurde.
+3. Aucune affectation des montants aux exercices, aucune normalisation des libellés,
+   aucun contrôle de cohérence, aucun `DataFrame`.
+
+Conclusion : le problème n'était pas l'affichage mais la **normalisation** entre la
+récupération et le rendu.
+
+### Module ajouté : `ecoinvest/data/statements_extract.py`
+
+Chaîne de traitement : PDF/texte → nombres → normalisation des libellés → DataFrame
+**rubriques × exercices** → contrôles → enregistrement validé.
+
+- `extract_pdf_pages` : lecture page par page en mode `layout` (la mise en page préserve
+  les colonnes) ; une page illisible produit un texte vide **et** un message, jamais une
+  exception silencieuse.
+- `parse_number` / `parse_number_ex` : espaces de milliers, virgule ou point décimal, les
+  deux mélangés, parenthèses négatives, suffixes `%` et unités texte. Le cas ambigu
+  `1.234` / `1,234` est **signalé** (milliers ou décimales).
+- `split_columns` : coupe sur 2 espaces ou plus ; une espace simple reste un séparateur
+  de milliers (`35 731` = 35 731).
+- `_single_number` : un groupe de 1–3 chiffres suivi de groupes de **exactement** 3
+  chiffres forme un nombre (`1 234 567`) ; sinon les nombres sont séparés.
+- `normalize_label` : associe chaque **libellé d'origine** à une rubrique canonique avec
+  un statut `mappée` / `à vérifier` / `non reconnue`. Les abréviations (`CA`, `RN`) et les
+  rubriques proches mais distinctes (« Ventes de marchandises », « Résultat net ajusté
+  part du groupe », « Marge brute » ≠ CAF) ne sont **jamais** fusionnées silencieusement.
+- `coherence_issues` : doublons, total actif ≠ total passif, absence de toute rubrique
+  reconnue — signalés **sans** modifier les montants sources.
+- `frame_to_record` : construit un enregistrement canonique à partir du tableau
+  **validé** ; une ligne sans clé est ignorée et listée, une valeur absente reste vide.
+
+### Interface (`ecoinvest/ui/pages/statements_page.py`)
+
+- Nouvelle section **« 📄 Récupérer / extraire des états financiers depuis un PDF »**
+  placée **au-dessus des onglets** : dépôt d'un fichier PDF **ou** URL d'un PDF officiel
+  AMMC, extraction, tableau éditable (`st.data_editor`) avec choix de la **Clé** canonique,
+  puis **enregistrement après validation explicite** (comptes sociaux/consolidés,
+  exercice, émetteur). Rien n'est enregistré automatiquement.
+- L'onglet « Documents AMMC » réutilise désormais ce moteur : « Lire le premier PDF »
+  produit directement le tableau structuré, à la place de l'ancien brouillon indicatif.
+
+### Tests
+
+`tests/test_statements_extract.py` (27 tests) : formats numériques, séparateurs,
+parenthèses négatives, ambiguïté signalée, non-fusion des libellés, structuration
+rubrique × exercice, valeur absente jamais nulle, doublons, équilibre actif/passif,
+enregistrement validé relu par le magasin, PDF invalide, PDF généré, et un test de
+non-régression sur un **vrai PDF AMMC** (sauté si le fichier n'est pas en cache local).
+
+Vérifié sur le rapport semestriel AMMC de Maroc Telecom (50 pages) : **783 lignes**
+structurées, unité/devise détectées, rubriques clés reconnues (total actif, chiffre
+d'affaires, flux d'exploitation), anomalies signalées.
+
+### Limites restantes
+
+- Un PDF **scanné** (image) nécessite un OCR non inclus : l'application le signale et
+  renvoie vers l'import CSV/Excel ou la saisie manuelle.
+- Quand deux colonnes ne sont séparées par aucune espace nette, le découpage est
+  **inféré** et la ligne porte le statut « à vérifier ».
+- La validation humaine reste obligatoire avant tout enregistrement.

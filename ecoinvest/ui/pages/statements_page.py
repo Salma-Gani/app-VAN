@@ -11,11 +11,15 @@ Trois causes de tableau vide ont été corrigées :
 2. le bilan importé (CSV/Excel/API) n'avait pas de lignes détaillées et le
    repli ne connaissait pas les blocs ``balance_assets`` / ``balance_liabilities`` ;
 3. la recherche AMMC parcourait des pages sans utiliser le filtre émetteur
-   officiel, ce qui ne trouvait presque jamais la société.
+   officiel, ce qui ne trouvait presque jamais la société ;
+4. l'extraction PDF renvoyait du texte brut : le module
+   ``ecoinvest.data.statements_extract`` normalise désormais les libellés et les
+   montants en un tableau rubriques × exercices, éditable puis enregistré
+   uniquement après validation humaine.
 """
 from __future__ import annotations
 
-from datetime import date
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -24,6 +28,7 @@ import streamlit as st
 
 from ...config import COLORS
 from ...data import statements as stmt
+from ...data import statements_extract as ext
 from ...utils.formatting import fmt_money, fmt_pct
 from .. import components as ui
 from . import shared
@@ -177,6 +182,8 @@ def render() -> None:
             "accent" if covered else "warn",
         ),
     )
+
+    _pdf_import(symbol, row)
 
     if not records:
         ui.note(
@@ -415,6 +422,146 @@ def _history(symbol: str, records: List[Dict[str, Any]]) -> None:
 
 # ═══════════════════════════ Import / API ═══════════════════════════
 
+def _pdf_import(symbol: str, row: pd.Series) -> None:
+    """Section « Récupérer un PDF » placée au-dessus des onglets.
+
+    Elle accepte un fichier local ou l'URL d'un PDF officiel, structure les
+    rubriques par exercice, laisse l'utilisateur corriger chaque montant, puis
+    n'enregistre qu'après validation explicite.
+    """
+    key = f"_pdf_result_{symbol}"
+    with st.expander(
+        "📄 Récupérer / extraire des états financiers depuis un PDF",
+        expanded=key in st.session_state,
+    ):
+        ui.section(
+            "Extraire un état financier PDF",
+            "Déposez un PDF officiel (AMMC) ou un fichier local. L'extraction propose un tableau "
+            "rubriques × exercices ; rien n'est enregistré sans votre validation, et aucune valeur "
+            "absente n'est remplacée par zéro.",
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            uploaded = st.file_uploader("Fichier PDF", type=["pdf"], key=f"stmt_pdf_up_{symbol}")
+        with c2:
+            url = st.text_input(
+                "…ou URL d'un PDF officiel",
+                value="",
+                placeholder="https://www.ammc.ma/…pdf",
+                key=f"stmt_pdf_url_{symbol}",
+            )
+        if st.button("🔎 Extraire et structurer", key=f"stmt_pdf_run_{symbol}"):
+            content: Optional[bytes] = None
+            source = ""
+            try:
+                if uploaded is not None:
+                    content = uploaded.getvalue()
+                    source = uploaded.name
+                elif url.strip():
+                    with st.spinner("Téléchargement du document…"):
+                        content = stmt.fetch_bytes(url.strip())
+                    source = url.strip()
+                if content is None:
+                    st.warning("Fournissez un fichier PDF ou une URL.")
+                else:
+                    with st.spinner(f"Extraction et normalisation de « {source} »…"):
+                        result = ext.structure_pdf(content, source=source)
+                    st.session_state[key] = {
+                        "result": result, "source": source, "url": url.strip(),
+                    }
+            except stmt.StatementError as exc:
+                st.error(str(exc))
+            except Exception as exc:  # fichier illisible, format inattendu
+                st.error(f"Extraction impossible : {exc}")
+
+        payload = st.session_state.get(key)
+        if payload and payload.get("result") is not None:
+            _render_extraction(symbol, row, payload, key)
+
+
+def _render_extraction(symbol: str, row: pd.Series, payload: Dict[str, Any], key: str) -> None:
+    """Affiche un résultat d'extraction éditable et gère l'enregistrement."""
+    result = payload["result"]
+    value_columns = list(result.value_columns or ["Exercice", "Exercice précédent"])
+    st.success(f"{len(result.rows)} ligne(s) détectée(s) sur {result.pages} page(s).")
+    st.markdown(
+        ui.badge(f"Unité détectée : {result.unit or 'non détectée'}", "info") + " " +
+        ui.badge(f"Devise : {result.currency or 'non détectée'}", "info") + " " +
+        ui.badge(f"Exercices : {', '.join(value_columns)}", "info"),
+        unsafe_allow_html=True,
+    )
+    for issue in result.issues[:12]:
+        st.warning(issue)
+    if len(result.issues) > 12:
+        st.caption(f"… et {len(result.issues) - 12} autre(s) anomalie(s) signalée(s).")
+
+    frame = ext.to_editor_frame(result)
+    if frame.empty:
+        st.info(
+            "Aucune ligne chiffrée détectée. Le PDF est peut-être une image scannée (OCR requis) "
+            "ou sans colonne de montants. Utilisez l'import CSV/Excel ou la saisie manuelle."
+        )
+        return
+
+    st.caption(
+        "Corrigez les montants si nécessaire et assignez une **Clé** aux lignes marquées "
+        "« non reconnue ». Seules les lignes portant une clé seront enregistrées."
+    )
+    column_config: Dict[str, Any] = {
+        "Clé": st.column_config.SelectboxColumn(
+            "Clé (rubrique)", options=[""] + ext.canonical_key_options(), required=False,
+            help="Choisissez la rubrique canonique à enregistrer.",
+        ),
+        "Statut": st.column_config.TextColumn("Statut", disabled=True),
+        "Bloc": st.column_config.TextColumn("Bloc", disabled=True),
+        "Rubrique": st.column_config.TextColumn("Rubrique", disabled=True),
+    }
+    for column in value_columns:
+        column_config[column] = st.column_config.NumberColumn(column, format="%.2f")
+    edited = st.data_editor(
+        frame, key=f"stmt_pdf_edit_{symbol}", column_config=column_config,
+        num_rows="dynamic", height=420, use_container_width=True,
+    )
+
+    default_year = 0
+    match = re.search(r"(19|20)\d{2}", str(value_columns[0]))
+    if match:
+        default_year = int(match.group(0))
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        consolidated = st.checkbox("Comptes consolidés", key=f"stmt_pdf_cons_{symbol}")
+    with c2:
+        fiscal_year = st.number_input(
+            "Exercice", min_value=1990, max_value=2100,
+            value=default_year or 2024, step=1, key=f"stmt_pdf_year_{symbol}",
+        )
+    with c3:
+        issuer = st.text_input(
+            "Émetteur", value=str(row.get("name") or symbol), key=f"stmt_pdf_issuer_{symbol}",
+        )
+    if st.button("💾 Enregistrer après validation", key=f"stmt_pdf_save_{symbol}"):
+        try:
+            record, skipped = ext.frame_to_record(
+                edited, symbol, issuer=issuer.strip() or symbol,
+                consolidated=consolidated,
+                source=f"Extraction PDF — {payload.get('source') or 'document'}",
+                source_url=payload.get("url") or "",
+                fiscal_year=int(fiscal_year),
+            )
+            stmt.save_statement(record)
+        except stmt.StatementError as exc:
+            st.error(str(exc))
+            return
+        st.success(f"État financier {fiscal_year} enregistré pour {symbol}.")
+        if skipped:
+            st.warning(
+                "Lignes ignorées faute de clé canonique : "
+                + ", ".join(skipped[:10]) + ("…" if len(skipped) > 10 else "")
+            )
+        st.session_state.pop(key, None)
+        st.rerun()
+
+
 def _import_tabs(symbol: str, row: pd.Series) -> None:
     tabs = st.tabs(["🔌 API externe", "📄 CSV / Excel", "🏛️ Documents AMMC", "✍️ Saisie manuelle"])
 
@@ -566,99 +713,28 @@ def _ammc_import(symbol: str, row: pd.Series) -> None:
         else:
             st.markdown(f"- [{label}]({doc.get('url')})")
 
-    if st.button("📄 Lire le premier PDF et préparer un brouillon", key=f"stmt_ammc_read_{symbol}"):
+    if st.button("📄 Lire le premier PDF et structurer", key=f"stmt_ammc_read_{symbol}"):
         docs_with_pdf = [d for d in docs if d.get("pdf_url")]
         if not docs_with_pdf:
             st.warning("Aucun PDF direct n'a été trouvé pour ces documents.")
             return
         doc = docs_with_pdf[0]
         try:
-            with st.spinner("Téléchargement et extraction du texte…"):
+            with st.spinner("Téléchargement et structuration du PDF…"):
                 content = stmt.fetch_bytes(doc["pdf_url"])
-                text = stmt.extract_pdf_text(content)
-                payload = {
-                    "symbol": symbol,
-                    "lines": stmt.key_lines(text),
-                    "parsed": stmt.parse_social_statements(text),
-                    "unit": stmt.detect_unit(text),
-                    "doc": doc,
-                }
+                result = ext.structure_pdf(content, source=doc.get("title") or doc["pdf_url"])
         except stmt.StatementError as exc:
             st.error(str(exc))
             return
-        st.session_state["_stmt_pdf"] = payload
+        st.session_state[f"_pdf_result_{symbol}"] = {
+            "result": result,
+            "source": doc.get("title") or doc["pdf_url"],
+            "url": doc["pdf_url"],
+        }
 
-    payload = st.session_state.get("_stmt_pdf") or {}
-    if payload.get("symbol") != symbol:
-        return
-    lines = payload.get("lines") or []
-    parsed = payload.get("parsed") or {}
-    doc = payload.get("doc") or {}
-    detected_unit = payload.get("unit") or "MAD"
-
-    st.warning(
-        "**Extraction indicative.** Les tableaux PDF peuvent concaténer plusieurs colonnes "
-        "(exercice courant, précédent, budget). Vérifiez chaque montant dans le PDF d'origine : "
-        "rien n'est enregistré automatiquement."
-    )
-    st.caption(f"Unité détectée dans le texte : {detected_unit}. À confirmer avant tout import.")
-    if lines:
-        ui.table(pd.DataFrame(lines)[["block", "field", "line"]], height=300, key="stmt_ammc_lines")
-
-    values = {block: parsed.get(block) or {} for block in ("income", "balance", "cashflow")}
-    if not any(values.values()):
-        st.info(
-            "Aucun poste n'a été reconnu automatiquement. Utilisez les lignes brutes ci-dessus "
-            "pour saisir les montants manuellement."
-        )
-        return
-
-    def field_label(block: str, field: str) -> str:
-        mapping = dict(stmt.LINE_DEFS.get(block, []))
-        return mapping.get(field, field)
-
-    preview_rows = [
-        {"Bloc": block, "Poste": field_label(block, field), "Valeur": value}
-        for block, items in values.items()
-        for field, value in items.items()
-    ]
-    ui.table(pd.DataFrame(preview_rows), height=240, key="stmt_ammc_preview")
-
-    year = doc.get("year")
-    if not year:
-        import re
-        match = re.search(r"(20\d{2})", str(doc.get("title") or ""))
-        year = match.group(1) if match else ""
-    row_data: Dict[str, Any] = {column: "" for column in stmt.CSV_COLUMNS}
-    row_data.update({
-        "symbol": symbol,
-        "issuer": issuer,
-        "fiscal_year": year,
-        "period": "FY",
-        "period_end": "",
-        "currency": "MAD",
-        "unit": detected_unit,
-        "consolidated": "false",
-        "source": f"AMMC — {doc.get('title') or 'document officiel'}",
-        "source_url": doc.get("pdf_url") or doc.get("url") or "",
-        "as_of": date.today().isoformat(),
-        "status": "manual",
-    })
-    for block, items in values.items():
-        for field, value in items.items():
-            row_data[f"{block}_{field}"] = value
-    draft = pd.DataFrame([row_data], columns=stmt.CSV_COLUMNS).to_csv(index=False)
-    st.download_button(
-        "📥 Télécharger le brouillon CSV à vérifier",
-        data=draft.encode("utf-8"),
-        file_name=f"brouillon_{symbol}_{year or 'exercice'}.csv",
-        mime="text/csv",
-        key=f"stmt_pdf_draft_{symbol}",
-    )
-    st.caption(
-        "Le brouillon reprend les valeurs extraites, avec la source, l'unité détectée et la date. "
-        "Contrôlez-le ligne à ligne, corrigez-le, puis importez-le via l'onglet CSV / Excel."
-    )
+    payload = st.session_state.get(f"_pdf_result_{symbol}")
+    if payload and payload.get("result") is not None:
+        _render_extraction(symbol, row, payload, f"_pdf_result_{symbol}")
 
 
 def _coverage(table: pd.DataFrame) -> None:

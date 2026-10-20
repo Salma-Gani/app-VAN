@@ -79,6 +79,7 @@ LINE_DEFS: Dict[str, List[Tuple[str, str]]] = {
         ("equity", "Capitaux propres"),
         ("total_debt", "Dettes de financement"),
         ("current_liabilities", "Passif circulant"),
+        ("total_liabilities", "Total du passif"),
         ("net_debt", "Dette nette"),
         ("shares", "Nombre de titres"),
     ],
@@ -104,7 +105,8 @@ EV_METHOD_EXCLUDED_SECTORS = ("banque", "assurance", "finance", "holding financi
 # vide alors que `record["balance"]` contenait bien les montants.
 ASSET_KEYS = ["non_current_assets", "current_assets", "inventory", "receivables",
               "cash", "total_assets"]
-LIABILITY_KEYS = ["equity", "total_debt", "current_liabilities", "net_debt", "shares"]
+LIABILITY_KEYS = ["equity", "total_debt", "current_liabilities", "total_liabilities",
+                  "net_debt", "shares"]
 
 PERIOD_ORDER = {"FY": 0, "S1": 1, "S2": 2, "T1": 3, "T2": 4, "T3": 5, "T4": 6}
 
